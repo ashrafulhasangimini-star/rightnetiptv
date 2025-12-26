@@ -1,12 +1,21 @@
-import { Tv, Menu, Search, Settings } from "lucide-react";
+import { Tv, Menu, Search, Settings, LogIn, LogOut } from "lucide-react";
 import { Button } from "./ui/button";
 import { Link } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
 
 interface HeaderProps {
   onMenuClick?: () => void;
 }
 
 const Header = ({ onMenuClick }: HeaderProps) => {
+  const { user, isAdmin, signOut } = useAuth();
+
+  const handleSignOut = async () => {
+    await signOut();
+    toast.success("সফলভাবে লগআউট হয়েছে");
+  };
+
   return (
     <header className="sticky top-0 z-40 w-full border-b border-border/30 bg-background/80 backdrop-blur-xl">
       <div className="container flex h-16 items-center justify-between px-4">
@@ -41,12 +50,28 @@ const Header = ({ onMenuClick }: HeaderProps) => {
             <Search className="h-5 w-5" />
           </Button>
           
-          <Link to="/admin">
-            <Button variant="glass" size="sm" className="gap-2">
-              <Settings className="h-4 w-4" />
-              <span className="hidden sm:inline">অ্যাডমিন</span>
-            </Button>
-          </Link>
+          {user ? (
+            <div className="flex items-center gap-2">
+              {isAdmin && (
+                <Link to="/admin">
+                  <Button variant="glass" size="sm" className="gap-2">
+                    <Settings className="h-4 w-4" />
+                    <span className="hidden sm:inline">অ্যাডমিন</span>
+                  </Button>
+                </Link>
+              )}
+              <Button variant="ghost" size="sm" onClick={handleSignOut}>
+                <LogOut className="h-4 w-4" />
+              </Button>
+            </div>
+          ) : (
+            <Link to="/auth">
+              <Button variant="glass" size="sm" className="gap-2">
+                <LogIn className="h-4 w-4" />
+                <span className="hidden sm:inline">লগইন</span>
+              </Button>
+            </Link>
+          )}
         </div>
       </div>
     </header>
