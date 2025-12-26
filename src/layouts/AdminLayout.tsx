@@ -1,11 +1,21 @@
 import { useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useNavigate } from "react-router-dom";
+import { useAuth } from "@/hooks/useAuth";
 import AdminSidebar from "@/components/admin/AdminSidebar";
 import { Button } from "@/components/ui/button";
-import { Menu } from "lucide-react";
+import { Menu, LogOut } from "lucide-react";
+import { toast } from "sonner";
 
 const AdminLayout = () => {
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { user, signOut } = useAuth();
+  const navigate = useNavigate();
+
+  const handleSignOut = async () => {
+    await signOut();
+    toast.success("সফলভাবে লগআউট হয়েছে");
+    navigate("/auth");
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -25,6 +35,15 @@ const AdminLayout = () => {
           </Button>
           <div className="flex-1">
             <h1 className="text-lg font-semibold">অ্যাডমিন প্যানেল</h1>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted-foreground hidden sm:block">
+              {user?.email}
+            </span>
+            <Button variant="ghost" size="sm" onClick={handleSignOut}>
+              <LogOut className="h-4 w-4 mr-2" />
+              লগআউট
+            </Button>
           </div>
         </header>
 
