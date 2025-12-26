@@ -1,10 +1,14 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Shield, User, Clock, Loader2, Trash2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Shield, User, Clock, Loader2, Trash2, Plus, X, Save } from "lucide-react";
 import { useUsers, useUpdateUserRole, useDeleteUser, UserProfile } from "@/hooks/useUsers";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { formatDistanceToNow } from "date-fns";
 import { bn } from "date-fns/locale";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 const roleLabels: Record<string, string> = {
   admin: "অ্যাডমিন",
@@ -13,10 +17,18 @@ const roleLabels: Record<string, string> = {
 };
 
 const Users = () => {
-  const { data: users, isLoading } = useUsers();
+  const { data: users, isLoading, refetch } = useUsers();
   const updateRole = useUpdateUserRole();
   const deleteUser = useDeleteUser();
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [showCreateForm, setShowCreateForm] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [newUser, setNewUser] = useState({
+    email: "",
+    password: "",
+    fullName: "",
+    role: "user" as "admin" | "moderator" | "user",
+  });
 
   const handleRoleChange = (userId: string, role: "admin" | "moderator" | "user") => {
     updateRole.mutate({ userId, role });
@@ -26,6 +38,63 @@ const Users = () => {
   const handleDelete = (userId: string) => {
     if (confirm("আপনি কি নিশ্চিত এই ব্যবহারকারী সরাতে চান?")) {
       deleteUser.mutate(userId);
+    }
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!newUser.email || !newUser.password) {
+      toast.error("ইমেইল এবং পাসওয়ার্ড আবশ্যক");
+      return;
+    }
+
+    if (newUser.password.length < 6) {
+      toast.error("পাসওয়ার্ড কমপক্ষে ৬ অক্ষর হতে হবে");
+      return;
+    }
+
+    setCreating(true);
+
+    try {
+      // Create user using Supabase Auth Admin API through edge function
+      const { data, error } = await supabase.auth.signUp({
+        email: newUser.email,
+        password: newUser.password,
+        options: {
+          data: {
+            full_name: newUser.fullName,
+          },
+        },
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        // If role is not 'user', update the role
+        if (newUser.role !== "user") {
+          // Wait a moment for the trigger to create the profile
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+          await supabase.from("user_roles").upsert({
+            user_id: data.user.id,
+            role: newUser.role,
+          });
+        }
+
+        toast.success("ব্যবহারকারী সফলভাবে তৈরি হয়েছে");
+        setShowCreateForm(false);
+        setNewUser({ email: "", password: "", fullName: "", role: "user" });
+        refetch();
+      }
+    } catch (error: any) {
+      if (error.message.includes("already registered")) {
+        toast.error("এই ইমেইল দিয়ে আগেই অ্যাকাউন্ট আছে");
+      } else {
+        toast.error("ব্যবহারকারী তৈরি করতে সমস্যা: " + error.message);
+      }
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -44,6 +113,10 @@ const Users = () => {
           <h1 className="font-display font-bold text-2xl">ব্যবহারকারী ম্যানেজমেন্ট</h1>
           <p className="text-muted-foreground">মোট {users?.length || 0} জন ব্যবহারকারী</p>
         </div>
+        <Button variant="gradient" className="gap-2" onClick={() => setShowCreateForm(true)}>
+          <Plus className="h-4 w-4" />
+          নতুন ব্যবহারকারী
+        </Button>
       </div>
 
       {users && users.length > 0 ? (
@@ -112,6 +185,87 @@ const Users = () => {
       ) : (
         <div className="glass-card p-12 text-center">
           <p className="text-muted-foreground">কোনো ব্যবহারকারী নেই।</p>
+        </div>
+      )}
+
+      {/* Create User Modal */}
+      {showCreateForm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm animate-fade-in">
+          <div className="glass-card w-full max-w-md mx-4 p-6 animate-scale-in">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="font-display font-bold text-xl">নতুন ব্যবহারকারী</h2>
+              <Button variant="ghost" size="icon" onClick={() => setShowCreateForm(false)}>
+                <X className="h-5 w-5" />
+              </Button>
+            </div>
+
+            <form onSubmit={handleCreateUser} className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="fullName">পূর্ণ নাম</Label>
+                <Input
+                  id="fullName"
+                  value={newUser.fullName}
+                  onChange={(e) => setNewUser({ ...newUser, fullName: e.target.value })}
+                  placeholder="ব্যবহারকারীর নাম"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="email">ইমেইল *</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={newUser.email}
+                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                  placeholder="user@example.com"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="password">পাসওয়ার্ড *</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={newUser.password}
+                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                  placeholder="কমপক্ষে ৬ অক্ষর"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="role">ভূমিকা</Label>
+                <Select
+                  value={newUser.role}
+                  onValueChange={(value) => setNewUser({ ...newUser, role: value as "admin" | "moderator" | "user" })}
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="admin">অ্যাডমিন</SelectItem>
+                    <SelectItem value="moderator">মডারেটর</SelectItem>
+                    <SelectItem value="user">ইউজার</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <Button type="button" variant="outline" onClick={() => setShowCreateForm(false)} className="flex-1">
+                  বাতিল
+                </Button>
+                <Button type="submit" variant="gradient" className="flex-1 gap-2" disabled={creating}>
+                  {creating ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4" />
+                  )}
+                  তৈরি করুন
+                </Button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>
