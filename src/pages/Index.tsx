@@ -3,26 +3,68 @@ import Header from "@/components/Header";
 import ChannelCard from "@/components/ChannelCard";
 import CategoryFilter from "@/components/CategoryFilter";
 import VideoPlayer from "@/components/VideoPlayer";
-import { mockChannels, mockCategories, mockStats } from "@/data/mockData";
+import { useChannels } from "@/hooks/useChannels";
+import { useCategories } from "@/hooks/useCategories";
 import { Channel } from "@/types/channel";
-import { Tv, Users, Radio, Layers } from "lucide-react";
+import { Tv, Users, Radio, Layers, Loader2 } from "lucide-react";
 
 const Index = () => {
+  const { data: dbChannels, isLoading: channelsLoading } = useChannels();
+  const { data: dbCategories, isLoading: categoriesLoading } = useCategories();
+  
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
 
+  const isLoading = channelsLoading || categoriesLoading;
+
+  // Transform DB channels to the Channel type used by UI components
+  const channels: Channel[] = dbChannels?.map(ch => ({
+    id: ch.id,
+    name: ch.name,
+    logo: ch.logo_url || "/placeholder.svg",
+    streamUrl: ch.stream_url,
+    category: ch.category?.name || "অন্যান্য",
+    description: ch.description || "",
+    isLive: ch.is_live,
+    viewers: ch.viewer_count,
+    createdAt: new Date(ch.created_at),
+    updatedAt: new Date(ch.updated_at),
+  })) || [];
+
+  // Transform DB categories
+  const categories = dbCategories?.map(cat => ({
+    id: cat.id,
+    name: cat.name,
+    icon: cat.icon || "📁",
+    channelCount: channels.filter(ch => ch.category === cat.name).length,
+  })) || [];
+
   const filteredChannels = selectedCategory
-    ? mockChannels.filter((ch) => 
-        mockCategories.find(c => c.id === selectedCategory)?.name === ch.category
+    ? channels.filter((ch) => 
+        categories.find(c => c.id === selectedCategory)?.name === ch.category
       )
-    : mockChannels;
+    : channels;
 
   const stats = [
-    { icon: Tv, label: "মোট চ্যানেল", value: mockStats.totalChannels },
-    { icon: Radio, label: "লাইভ চ্যানেল", value: mockStats.liveChannels },
-    { icon: Users, label: "দর্শক", value: mockStats.totalViewers },
-    { icon: Layers, label: "ক্যাটাগরি", value: mockStats.categories },
+    { icon: Tv, label: "মোট চ্যানেল", value: channels.length },
+    { icon: Radio, label: "লাইভ চ্যানেল", value: channels.filter(ch => ch.isLive).length },
+    { icon: Users, label: "দর্শক", value: channels.reduce((acc, ch) => acc + ch.viewers, 0) },
+    { icon: Layers, label: "ক্যাটাগরি", value: categories.length },
   ];
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <Header />
+        <div className="flex items-center justify-center h-[60vh]">
+          <div className="text-center space-y-4">
+            <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
+            <p className="text-muted-foreground">লোড হচ্ছে...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -63,30 +105,33 @@ const Index = () => {
         <div className="mb-8">
           <h2 className="font-display font-bold text-2xl mb-6">চ্যানেল সমূহ</h2>
           <CategoryFilter
-            categories={mockCategories}
+            categories={categories}
             selectedCategory={selectedCategory}
             onSelectCategory={setSelectedCategory}
           />
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {filteredChannels.map((channel, index) => (
-            <div 
-              key={channel.id} 
-              className="animate-slide-up"
-              style={{ animationDelay: `${index * 0.05}s` }}
-            >
-              <ChannelCard
-                channel={channel}
-                onClick={setSelectedChannel}
-              />
-            </div>
-          ))}
-        </div>
-
-        {filteredChannels.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">এই ক্যাটাগরিতে কোনো চ্যানেল নেই।</p>
+        {filteredChannels.length > 0 ? (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {filteredChannels.map((channel, index) => (
+              <div 
+                key={channel.id} 
+                className="animate-slide-up"
+                style={{ animationDelay: `${index * 0.05}s` }}
+              >
+                <ChannelCard
+                  channel={channel}
+                  onClick={setSelectedChannel}
+                />
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 glass-card">
+            <Tv className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+            <p className="text-muted-foreground">
+              {selectedCategory ? "এই ক্যাটাগরিতে কোনো চ্যানেল নেই।" : "কোনো চ্যানেল যোগ করা হয়নি।"}
+            </p>
           </div>
         )}
       </section>
