@@ -1,4 +1,4 @@
-import { Tv, Menu, Search, Settings, LogIn, LogOut, Download } from "lucide-react";
+import { Menu, Search, Settings, LogIn, LogOut, Download } from "lucide-react";
 import { Button } from "./ui/button";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
@@ -27,11 +27,13 @@ const Header = ({ onMenuClick }: HeaderProps) => {
           )}
           
           <Link to="/" className="flex items-center gap-2">
-            <div className="p-2 rounded-xl bg-gradient-to-br from-primary to-accent">
-              <Tv className="h-5 w-5 text-foreground" />
-            </div>
+            <img 
+              src="/logo.jpeg" 
+              alt="Right NeT TV" 
+              className="h-10 w-10 rounded-xl object-contain"
+            />
             <span className="font-display font-bold text-xl gradient-text hidden sm:block">
-              StreamBD
+              Right NeT TV
             </span>
           </Link>
         </div>

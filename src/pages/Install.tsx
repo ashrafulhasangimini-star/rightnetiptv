@@ -61,11 +61,13 @@ const Install = () => {
       {/* Header */}
       <div className="bg-gradient-to-b from-primary/20 to-background py-16 px-4">
         <div className="container mx-auto text-center">
-          <div className="w-20 h-20 bg-primary rounded-2xl flex items-center justify-center mx-auto mb-6">
-            <Tv className="w-10 h-10 text-primary-foreground" />
-          </div>
+          <img 
+            src="/logo.jpeg" 
+            alt="Right NeT TV" 
+            className="w-20 h-20 rounded-2xl mx-auto mb-6 object-contain bg-white"
+          />
           <h1 className="text-3xl md:text-4xl font-display font-bold mb-4">
-            RightNet IPTV ইনস্টল করুন
+            Right NeT TV ইনস্টল করুন
           </h1>
           <p className="text-muted-foreground text-lg max-w-xl mx-auto">
             আপনার ডিভাইসে অ্যাপ হিসেবে ইনস্টল করুন - দ্রুত অ্যাক্সেস, অফলাইন সাপোর্ট
