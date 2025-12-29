@@ -17,8 +17,8 @@ export default defineConfig(({ mode }) => ({
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "apple-touch-icon.png", "mask-icon.svg"],
       manifest: {
-        name: "RightNet IPTV - লাইভ টিভি স্ট্রিমিং",
-        short_name: "RightNet IPTV",
+        name: "Right NeT TV - লাইভ টিভি স্ট্রিমিং",
+        short_name: "Right NeT TV",
         description: "বাংলাদেশের সেরা লাইভ টিভি স্ট্রিমিং প্ল্যাটফর্ম",
         theme_color: "#0f172a",
         background_color: "#0f172a",
