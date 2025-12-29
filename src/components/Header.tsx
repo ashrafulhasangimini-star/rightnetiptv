@@ -1,4 +1,4 @@
-import { Tv, Menu, Search, Settings, LogIn, LogOut } from "lucide-react";
+import { Tv, Menu, Search, Settings, LogIn, LogOut, Download } from "lucide-react";
 import { Button } from "./ui/button";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
@@ -49,6 +49,13 @@ const Header = ({ onMenuClick }: HeaderProps) => {
           <Button variant="ghost" size="icon" className="md:hidden">
             <Search className="h-5 w-5" />
           </Button>
+
+          <Link to="/install">
+            <Button variant="outline" size="sm" className="gap-2">
+              <Download className="h-4 w-4" />
+              <span className="hidden sm:inline">ইনস্টল</span>
+            </Button>
+          </Link>
           
           {user ? (
             <div className="flex items-center gap-2">

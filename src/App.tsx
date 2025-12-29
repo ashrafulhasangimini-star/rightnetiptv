@@ -15,6 +15,7 @@ import Categories from "./pages/admin/Categories";
 import Streams from "./pages/admin/Streams";
 import Users from "./pages/admin/Users";
 import Settings from "./pages/admin/Settings";
+import Install from "./pages/Install";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +29,7 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/auth" element={<Auth />} />
+            <Route path="/install" element={<Install />} />
             
             {/* Admin Routes - Protected */}
             <Route
