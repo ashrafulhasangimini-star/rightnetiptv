@@ -1,15 +1,24 @@
 import { Channel } from "@/types/channel";
-import { X, Volume2, VolumeX, Maximize, Minimize, Settings, Users, Radio, AlertCircle } from "lucide-react";
+import { X, Volume2, VolumeX, Maximize, Minimize, Settings, Users, Radio, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "./ui/button";
 import { useState, useRef, useEffect } from "react";
 import Hls from "hls.js";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "./ui/carousel";
 
 interface VideoPlayerProps {
   channel: Channel;
+  channels: Channel[];
   onClose: () => void;
+  onChannelChange: (channel: Channel) => void;
 }
 
-const VideoPlayer = ({ channel, onClose }: VideoPlayerProps) => {
+const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlayerProps) => {
   const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -222,6 +231,49 @@ const VideoPlayer = ({ channel, onClose }: VideoPlayerProps) => {
         <div className="p-4 border-t border-border/30">
           <p className="text-muted-foreground">{channel.description}</p>
           <p className="text-sm text-muted-foreground/60 mt-2">ক্যাটাগরি: {channel.category}</p>
+        </div>
+
+        {/* Channel Carousel */}
+        <div className="p-4 border-t border-border/30">
+          <h3 className="font-display font-semibold mb-3">অন্যান্য চ্যানেল</h3>
+          <Carousel
+            opts={{
+              align: "start",
+              loop: true,
+            }}
+            className="w-full"
+          >
+            <CarouselContent className="-ml-2 md:-ml-4">
+              {channels
+                .filter((ch) => ch.id !== channel.id)
+                .map((ch) => (
+                  <CarouselItem key={ch.id} className="pl-2 md:pl-4 basis-1/3 sm:basis-1/4 md:basis-1/5 lg:basis-1/6">
+                    <div
+                      className="relative cursor-pointer group"
+                      onClick={() => onChannelChange(ch)}
+                    >
+                      <div className="aspect-video rounded-lg overflow-hidden bg-muted">
+                        <img
+                          src={ch.logo}
+                          alt={ch.name}
+                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+                        {ch.isLive && (
+                          <div className="absolute top-1 left-1 bg-destructive text-destructive-foreground text-[10px] px-1.5 py-0.5 rounded font-medium flex items-center gap-0.5">
+                            <Radio className="w-2 h-2" />
+                            LIVE
+                          </div>
+                        )}
+                      </div>
+                      <p className="text-xs mt-1 truncate text-center">{ch.name}</p>
+                    </div>
+                  </CarouselItem>
+                ))}
+            </CarouselContent>
+            <CarouselPrevious className="left-0 -translate-x-1/2" />
+            <CarouselNext className="right-0 translate-x-1/2" />
+          </Carousel>
         </div>
       </div>
     </div>

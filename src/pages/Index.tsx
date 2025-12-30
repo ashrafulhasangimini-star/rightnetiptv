@@ -140,7 +140,9 @@ const Index = () => {
       {selectedChannel && (
         <VideoPlayer
           channel={selectedChannel}
+          channels={channels}
           onClose={() => setSelectedChannel(null)}
+          onChannelChange={setSelectedChannel}
         />
       )}
     </div>
