@@ -55,15 +55,18 @@ const ChannelForm = ({ channel, onSave, onClose }: ChannelFormProps) => {
           <div className="space-y-2">
             <Label htmlFor="streamUrl" className="flex items-center gap-2">
               <LinkIcon className="h-4 w-4" />
-              স্ট্রিম URL (RTMP/HLS)
+              স্ট্রিম URL (M3U8/HLS/RTMP)
             </Label>
             <Input
               id="streamUrl"
               value={formData.streamUrl}
               onChange={(e) => setFormData({ ...formData, streamUrl: e.target.value })}
-              placeholder="rtmp://example.com/live/stream"
+              placeholder="https://example.com/live/stream.m3u8"
               required
             />
+            <p className="text-xs text-muted-foreground">
+              সাপোর্টেড ফরম্যাট: .m3u8, HLS, RTMP লিংক
+            </p>
           </div>
 
           <div className="space-y-2">
