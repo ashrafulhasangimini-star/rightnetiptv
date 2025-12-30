@@ -79,7 +79,7 @@ const Index = () => {
           <div className="text-center max-w-3xl mx-auto mb-12">
             <h1 className="font-display font-bold text-4xl lg:text-6xl mb-4 animate-slide-up">
               সরাসরি দেখুন{" "}
-              <span className="gradient-text">বাংলা টিভি</span>
+              <span className="gradient-text">Right Net TV</span>
             </h1>
             <p className="text-lg text-muted-foreground animate-slide-up" style={{ animationDelay: "0.1s" }}>
               বাংলাদেশের সেরা টিভি চ্যানেলগুলো এখন আপনার হাতের মুঠোয়। 
