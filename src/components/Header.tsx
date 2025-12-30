@@ -33,7 +33,7 @@ const Header = ({ onMenuClick }: HeaderProps) => {
               className="h-10 w-10 rounded-xl object-contain"
             />
             <span className="font-display font-bold text-xl gradient-text hidden sm:block">
-              Right NeT TV
+              Right Net TV
             </span>
           </Link>
         </div>
