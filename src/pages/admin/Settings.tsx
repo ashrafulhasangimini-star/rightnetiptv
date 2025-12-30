@@ -33,13 +33,6 @@ const Settings = () => {
             </p>
           </div>
           <div className="space-y-2">
-            <Label>RTMP সার্ভার URL</Label>
-            <Input placeholder="rtmp://stream.example.com/live" />
-            <p className="text-xs text-muted-foreground">
-              ইনজেস্ট সার্ভার (এনকোডার থেকে স্ট্রিম রিসিভ)
-            </p>
-          </div>
-          <div className="space-y-2">
             <Label>M3U8 প্লেলিস্ট পাথ</Label>
             <Input placeholder="/live/{stream_key}/index.m3u8" />
             <p className="text-xs text-muted-foreground">
