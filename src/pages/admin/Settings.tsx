@@ -26,16 +26,29 @@ const Settings = () => {
         
         <div className="space-y-4">
           <div className="space-y-2">
-            <Label>RTMP সার্ভার URL</Label>
-            <Input defaultValue="rtmp://stream.example.com/live" />
+            <Label>M3U8/HLS সার্ভার URL</Label>
+            <Input placeholder="https://stream.example.com/hls" />
+            <p className="text-xs text-muted-foreground">
+              প্রাইমারি HLS স্ট্রিমিং সার্ভার (.m3u8 প্লেলিস্ট)
+            </p>
           </div>
           <div className="space-y-2">
-            <Label>HLS সার্ভার URL</Label>
-            <Input defaultValue="https://hls.example.com" />
+            <Label>RTMP সার্ভার URL</Label>
+            <Input placeholder="rtmp://stream.example.com/live" />
+            <p className="text-xs text-muted-foreground">
+              ইনজেস্ট সার্ভার (এনকোডার থেকে স্ট্রিম রিসিভ)
+            </p>
+          </div>
+          <div className="space-y-2">
+            <Label>M3U8 প্লেলিস্ট পাথ</Label>
+            <Input placeholder="/live/{stream_key}/index.m3u8" />
+            <p className="text-xs text-muted-foreground">
+              স্ট্রিম কী দিয়ে প্লেলিস্ট URL জেনারেট হবে
+            </p>
           </div>
           <div className="space-y-2">
             <Label>স্ট্রিম কী প্রিফিক্স</Label>
-            <Input defaultValue="stream_" />
+            <Input placeholder="stream_" />
           </div>
         </div>
       </div>
