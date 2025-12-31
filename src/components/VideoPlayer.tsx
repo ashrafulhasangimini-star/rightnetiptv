@@ -26,6 +26,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const carouselPointerStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -251,7 +252,22 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
                     <button
                       type="button"
                       className="relative cursor-pointer group w-full text-left"
-                      onClick={(e) => {
+                      onPointerDown={(e) => {
+                        carouselPointerStartRef.current = {
+                          x: e.clientX,
+                          y: e.clientY,
+                        };
+                      }}
+                      onPointerUp={(e) => {
+                        const start = carouselPointerStartRef.current;
+                        carouselPointerStartRef.current = null;
+                        if (!start) return;
+
+                        const dx = Math.abs(e.clientX - start.x);
+                        const dy = Math.abs(e.clientY - start.y);
+                        const isTap = dx < 8 && dy < 8;
+                        if (!isTap) return;
+
                         e.preventDefault();
                         e.stopPropagation();
                         onChannelChange(ch);
