@@ -128,8 +128,8 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   }, []);
 
   return (
-    <div ref={containerRef} className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl animate-fade-in">
-      <div className="h-full flex flex-col">
+    <div ref={containerRef} className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl animate-fade-in overflow-y-auto">
+      <div className="min-h-full flex flex-col">
         {/* Header */}
         <div className="flex items-center justify-between p-4 border-b border-border/30">
           <div className="flex items-center gap-4">
@@ -161,7 +161,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
         </div>
 
         {/* Video Area */}
-        <div className="flex-1 relative bg-black flex items-center justify-center">
+        <div className="relative bg-black flex items-center justify-center" style={{ minHeight: '50vh', maxHeight: '70vh' }}>
           {/* Video Element */}
           <video
             ref={videoRef}
