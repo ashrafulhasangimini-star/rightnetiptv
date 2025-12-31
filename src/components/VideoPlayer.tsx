@@ -234,24 +234,25 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
           <p className="text-sm text-muted-foreground/60 mt-2">ক্যাটাগরি: {channel.category}</p>
         </div>
 
-        {/* Channel Carousel */}
+        {/* Channel Carousel - Toffeelive Style */}
         <div className="p-4 border-t border-border/30">
-          <h3 className="font-display font-semibold mb-3">অন্যান্য চ্যানেল</h3>
+          <h3 className="font-display font-semibold mb-4 text-lg">Live</h3>
           <Carousel
             opts={{
               align: "start",
               loop: true,
+              dragFree: true,
             }}
             className="w-full"
           >
-            <CarouselContent className="-ml-2 md:-ml-4">
+            <CarouselContent className="-ml-3">
               {channels
                 .filter((ch) => ch.id !== channel.id)
                 .map((ch) => (
-                  <CarouselItem key={ch.id} className="pl-2 md:pl-4 basis-1/3 sm:basis-1/4 md:basis-1/5 lg:basis-1/6">
+                  <CarouselItem key={ch.id} className="pl-3 basis-auto">
                     <button
                       type="button"
-                      className="relative cursor-pointer group w-full text-left"
+                      className="flex flex-col items-center gap-2 cursor-pointer group"
                       onPointerDown={(e) => {
                         carouselPointerStartRef.current = {
                           x: e.clientX,
@@ -273,27 +274,39 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
                         onChannelChange(ch);
                       }}
                     >
-                      <div className="aspect-video rounded-lg overflow-hidden bg-muted">
-                        <img
-                          src={ch.logo}
-                          alt={ch.name}
-                          className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
-                        />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
+                      {/* Circular Channel Logo */}
+                      <div className="relative">
+                        <div className="w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden border-2 border-white/80 bg-muted transition-all duration-300 group-hover:border-primary group-hover:scale-105 shadow-lg">
+                          {ch.logo ? (
+                            <img
+                              src={ch.logo}
+                              alt={ch.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/30 to-primary/10 text-xl font-bold text-primary">
+                              {ch.name.charAt(0).toUpperCase()}
+                            </div>
+                          )}
+                        </div>
+                        {/* Live Badge */}
                         {ch.isLive && (
-                          <div className="absolute top-1 left-1 bg-destructive text-destructive-foreground text-[10px] px-1.5 py-0.5 rounded font-medium flex items-center gap-0.5 pointer-events-none">
+                          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-destructive text-destructive-foreground text-[9px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-0.5 shadow-md">
                             <Radio className="w-2 h-2" />
                             LIVE
                           </div>
                         )}
                       </div>
-                      <p className="text-xs mt-1 truncate text-center">{ch.name}</p>
+                      {/* Channel Name */}
+                      <p className="text-xs text-center max-w-[80px] truncate text-muted-foreground group-hover:text-foreground transition-colors">
+                        {ch.name}
+                      </p>
                     </button>
                   </CarouselItem>
                 ))}
             </CarouselContent>
-            <CarouselPrevious className="left-0 -translate-x-1/2" />
-            <CarouselNext className="right-0 translate-x-1/2" />
+            <CarouselPrevious className="left-0 -translate-x-1/2 bg-background/80 hover:bg-background" />
+            <CarouselNext className="right-0 translate-x-1/2 bg-background/80 hover:bg-background" />
           </Carousel>
         </div>
       </div>
