@@ -248,9 +248,14 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
                 .filter((ch) => ch.id !== channel.id)
                 .map((ch) => (
                   <CarouselItem key={ch.id} className="pl-2 md:pl-4 basis-1/3 sm:basis-1/4 md:basis-1/5 lg:basis-1/6">
-                    <div
-                      className="relative cursor-pointer group"
-                      onClick={() => onChannelChange(ch)}
+                    <button
+                      type="button"
+                      className="relative cursor-pointer group w-full text-left"
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        onChannelChange(ch);
+                      }}
                     >
                       <div className="aspect-video rounded-lg overflow-hidden bg-muted">
                         <img
@@ -258,16 +263,16 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
                           alt={ch.name}
                           className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-110"
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/70 to-transparent pointer-events-none" />
                         {ch.isLive && (
-                          <div className="absolute top-1 left-1 bg-destructive text-destructive-foreground text-[10px] px-1.5 py-0.5 rounded font-medium flex items-center gap-0.5">
+                          <div className="absolute top-1 left-1 bg-destructive text-destructive-foreground text-[10px] px-1.5 py-0.5 rounded font-medium flex items-center gap-0.5 pointer-events-none">
                             <Radio className="w-2 h-2" />
                             LIVE
                           </div>
                         )}
                       </div>
                       <p className="text-xs mt-1 truncate text-center">{ch.name}</p>
-                    </div>
+                    </button>
                   </CarouselItem>
                 ))}
             </CarouselContent>
