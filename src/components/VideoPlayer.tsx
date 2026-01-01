@@ -130,15 +130,19 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
 
   return (
     <div ref={containerRef} className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl animate-fade-in overflow-y-auto">
-      {/* Floating Close Button - Always visible */}
-      <Button 
-        variant="destructive" 
-        size="icon" 
-        onClick={onClose}
-        className="fixed top-4 right-4 z-[60] h-12 w-12 rounded-full shadow-xl"
-      >
-        <X className="w-6 h-6" />
-      </Button>
+      {/* Floating Close Button - Auto-hide with pulse */}
+      <div className="fixed top-0 right-0 z-[60] p-4 group/close">
+        {/* Hover trigger area */}
+        <div className="absolute inset-0 w-24 h-24" />
+        <Button 
+          variant="destructive" 
+          size="icon" 
+          onClick={onClose}
+          className="h-12 w-12 rounded-full shadow-xl opacity-30 group-hover/close:opacity-100 transition-all duration-300 animate-pulse group-hover/close:animate-none"
+        >
+          <X className="w-6 h-6" />
+        </Button>
+      </div>
 
       <div className="min-h-full flex flex-col">
         {/* Header */}
