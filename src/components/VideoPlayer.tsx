@@ -156,8 +156,13 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
             </div>
           </div>
           
-          <Button variant="ghost" size="icon" onClick={onClose}>
-            <X className="w-5 h-5" />
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={onClose}
+            className="h-10 w-10 md:h-12 md:w-12 rounded-full bg-destructive/10 hover:bg-destructive hover:text-destructive-foreground transition-all"
+          >
+            <X className="w-6 h-6 md:w-7 md:h-7" />
           </Button>
         </div>
 
