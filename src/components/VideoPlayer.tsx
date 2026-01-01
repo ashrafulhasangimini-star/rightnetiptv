@@ -130,12 +130,12 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
 
   return (
     <div ref={containerRef} className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl animate-fade-in overflow-y-auto">
-      {/* Floating Close Button - Always visible on mobile */}
+      {/* Floating Close Button - Always visible */}
       <Button 
-        variant="ghost" 
+        variant="destructive" 
         size="icon" 
         onClick={onClose}
-        className="fixed top-4 right-4 z-[60] h-10 w-10 md:hidden rounded-full bg-black/60 hover:bg-destructive text-white hover:text-destructive-foreground transition-all shadow-lg backdrop-blur-sm"
+        className="fixed top-4 right-4 z-[60] h-12 w-12 rounded-full shadow-xl"
       >
         <X className="w-6 h-6" />
       </Button>
@@ -166,15 +166,6 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
             </div>
           </div>
           
-          {/* Desktop Close Button */}
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={onClose}
-            className="hidden md:flex h-12 w-12 rounded-full bg-destructive/10 hover:bg-destructive hover:text-destructive-foreground transition-all"
-          >
-            <X className="w-7 h-7" />
-          </Button>
         </div>
 
         {/* Video Area */}
