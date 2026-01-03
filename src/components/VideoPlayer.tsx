@@ -1,7 +1,7 @@
 import { Channel } from "@/types/channel";
-import { X, Volume2, VolumeX, Maximize, Minimize, Settings, Users, Radio, AlertCircle, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, Volume2, VolumeX, Maximize, Minimize, Settings, Users, Radio, AlertCircle } from "lucide-react";
 import { Button } from "./ui/button";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import Hls from "hls.js";
 import {
   Carousel,
@@ -18,14 +18,32 @@ interface VideoPlayerProps {
   onChannelChange: (channel: Channel) => void;
 }
 
+// Detect if running on Android TV or large screen TV
+const isTV = () => {
+  if (typeof window === 'undefined') return false;
+  const ua = navigator.userAgent.toLowerCase();
+  return ua.includes('android tv') || 
+         ua.includes('googletv') || 
+         ua.includes('smart-tv') ||
+         ua.includes('smarttv') ||
+         ua.includes('hbbtv') ||
+         ua.includes('tizen') ||
+         ua.includes('webos') ||
+         (window.innerWidth >= 1920 && !('ontouchstart' in window));
+};
+
 const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlayerProps) => {
   const [isMuted, setIsMuted] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isTVMode] = useState(isTV);
+  const [focusedChannelIndex, setFocusedChannelIndex] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const hlsRef = useRef<Hls | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const channelButtonsRef = useRef<(HTMLButtonElement | null)[]>([]);
   const carouselPointerStartRef = useRef<{ x: number; y: number } | null>(null);
 
   useEffect(() => {
@@ -128,17 +146,79 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
     };
   }, []);
 
+  // Keyboard/D-pad navigation for TV
+  const otherChannels = channels.filter((ch) => ch.id !== channel.id);
+
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    // ESC or Android Back button to close
+    if (e.key === 'Escape' || e.key === 'Backspace' || e.keyCode === 27) {
+      e.preventDefault();
+      onClose();
+      return;
+    }
+
+    // D-pad navigation
+    switch (e.key) {
+      case 'ArrowLeft':
+        e.preventDefault();
+        setFocusedChannelIndex((prev) => Math.max(0, prev - 1));
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        setFocusedChannelIndex((prev) => Math.min(otherChannels.length - 1, prev + 1));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        closeButtonRef.current?.focus();
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        channelButtonsRef.current[focusedChannelIndex]?.focus();
+        break;
+      case 'Enter':
+      case ' ':
+        // Let the focused element handle it
+        break;
+      case 'm':
+      case 'M':
+        setIsMuted(!isMuted);
+        break;
+      case 'f':
+      case 'F':
+        toggleFullscreen();
+        break;
+    }
+  }, [onClose, otherChannels.length, focusedChannelIndex, isMuted]);
+
+  useEffect(() => {
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
+
+  // Focus on channel when index changes
+  useEffect(() => {
+    channelButtonsRef.current[focusedChannelIndex]?.focus();
+  }, [focusedChannelIndex]);
+
   return (
     <div ref={containerRef} className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl animate-fade-in overflow-y-auto">
-      {/* Floating Close Button - Hidden, shows on hover */}
-      <div className="fixed top-0 right-0 z-[60] p-4 group/close">
-        {/* Large hover trigger area */}
-        <div className="absolute inset-0 w-28 h-28" />
+      {/* Floating Close Button - Always visible on TV, hover on desktop/mobile */}
+      <div className={`fixed top-0 right-0 z-[60] p-4 ${isTVMode ? '' : 'group/close'}`}>
+        {/* Large hover trigger area - only for non-TV */}
+        {!isTVMode && <div className="absolute inset-0 w-28 h-28" />}
         <Button 
+          ref={closeButtonRef}
           variant="destructive" 
           size="icon" 
           onClick={onClose}
-          className="h-12 w-12 rounded-full shadow-xl opacity-0 scale-75 group-hover/close:opacity-100 group-hover/close:scale-100 transition-all duration-300"
+          className={`h-12 w-12 rounded-full shadow-xl transition-all duration-300 
+            focus:ring-4 focus:ring-destructive/50 focus:outline-none focus:scale-110
+            ${isTVMode 
+              ? 'opacity-100 scale-100' 
+              : 'opacity-0 scale-75 group-hover/close:opacity-100 group-hover/close:scale-100'
+            }`}
+          tabIndex={0}
+          aria-label="বন্ধ করুন"
         >
           <X className="w-6 h-6" />
         </Button>
@@ -216,26 +296,45 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
                   variant="ghost"
                   size="icon"
                   onClick={() => setIsMuted(!isMuted)}
-                  className="text-white hover:bg-white/10"
+                  className="text-white hover:bg-white/10 focus:ring-2 focus:ring-white/50 focus:outline-none"
+                  tabIndex={0}
+                  aria-label={isMuted ? "আনমিউট করুন" : "মিউট করুন"}
                 >
                   {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                 </Button>
               </div>
               
               <div className="flex items-center gap-2">
-                <Button variant="ghost" size="icon" className="text-white hover:bg-white/10">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="text-white hover:bg-white/10 focus:ring-2 focus:ring-white/50 focus:outline-none"
+                  tabIndex={0}
+                  aria-label="সেটিংস"
+                >
                   <Settings className="w-5 h-5" />
                 </Button>
                 <Button 
                   variant="ghost" 
                   size="icon" 
-                  className="text-white hover:bg-white/10"
+                  className="text-white hover:bg-white/10 focus:ring-2 focus:ring-white/50 focus:outline-none"
                   onClick={toggleFullscreen}
+                  tabIndex={0}
+                  aria-label={isFullscreen ? "ছোট করুন" : "ফুলস্ক্রিন"}
                 >
                   {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
                 </Button>
               </div>
             </div>
+            {/* TV Mode Keyboard Hints */}
+            {isTVMode && (
+              <div className="flex justify-center gap-4 mt-2 text-xs text-white/60">
+                <span>M = মিউট</span>
+                <span>F = ফুলস্ক্রিন</span>
+                <span>← → = চ্যানেল নির্বাচন</span>
+                <span>ESC = বন্ধ</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -257,13 +356,16 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
             className="w-full"
           >
             <CarouselContent className="-ml-3">
-              {channels
-                .filter((ch) => ch.id !== channel.id)
-                .map((ch) => (
+              {otherChannels.map((ch, index) => (
                   <CarouselItem key={ch.id} className="pl-3 basis-auto">
                     <button
+                      ref={(el) => { channelButtonsRef.current[index] = el; }}
                       type="button"
-                      className="flex flex-col items-center gap-2 cursor-pointer group"
+                      className={`flex flex-col items-center gap-2 cursor-pointer group outline-none
+                        ${isTVMode ? 'tv:w-24 tv:h-24' : ''}
+                        focus:scale-110 transition-transform duration-200`}
+                      tabIndex={0}
+                      onFocus={() => setFocusedChannelIndex(index)}
                       onPointerDown={(e) => {
                         carouselPointerStartRef.current = {
                           x: e.clientX,
@@ -284,10 +386,19 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
                         e.stopPropagation();
                         onChannelChange(ch);
                       }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          onChannelChange(ch);
+                        }
+                      }}
                     >
                       {/* Circular Channel Logo */}
                       <div className="relative">
-                        <div className="w-16 h-16 md:w-20 md:h-20 rounded-full overflow-hidden border-2 border-white/80 bg-muted transition-all duration-300 group-hover:border-primary group-hover:scale-105 shadow-lg">
+                        <div className={`w-16 h-16 md:w-20 md:h-20 ${isTVMode ? 'lg:w-24 lg:h-24' : ''} rounded-full overflow-hidden border-2 border-white/80 bg-muted transition-all duration-300 
+                          group-hover:border-primary group-hover:scale-105 
+                          group-focus:border-primary group-focus:scale-110 group-focus:ring-4 group-focus:ring-primary/50
+                          shadow-lg`}>
                           {ch.logo ? (
                             <img
                               src={ch.logo}
@@ -309,15 +420,15 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
                         )}
                       </div>
                       {/* Channel Name */}
-                      <p className="text-xs text-center max-w-[80px] truncate text-muted-foreground group-hover:text-foreground transition-colors">
+                      <p className={`text-xs text-center max-w-[80px] ${isTVMode ? 'lg:max-w-[100px] lg:text-sm' : ''} truncate text-muted-foreground group-hover:text-foreground group-focus:text-primary transition-colors`}>
                         {ch.name}
                       </p>
                     </button>
                   </CarouselItem>
                 ))}
             </CarouselContent>
-            <CarouselPrevious className="left-0 -translate-x-1/2 bg-background/80 hover:bg-background" />
-            <CarouselNext className="right-0 translate-x-1/2 bg-background/80 hover:bg-background" />
+            <CarouselPrevious className="left-0 -translate-x-1/2 bg-background/80 hover:bg-background focus:ring-2 focus:ring-primary" />
+            <CarouselNext className="right-0 translate-x-1/2 bg-background/80 hover:bg-background focus:ring-2 focus:ring-primary" />
           </Carousel>
         </div>
       </div>
