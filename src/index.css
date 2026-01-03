@@ -206,4 +206,18 @@
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
+
+  /* TV-friendly focus styles */
+  .tv-focus:focus {
+    @apply ring-4 ring-primary/60 ring-offset-2 ring-offset-background scale-105;
+    outline: none;
+  }
+
+  /* Larger touch targets for TV */
+  @media (min-width: 1920px) and (hover: none) {
+    .tv\:w-24 { width: 6rem; }
+    .tv\:h-24 { height: 6rem; }
+    .tv\:text-lg { font-size: 1.125rem; }
+    .tv\:p-6 { padding: 1.5rem; }
+  }
 }
