@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'app.lovable.773b7c0800b24414a17a5c50947736de',
+  appId: 'com.rightnetiptv.app',
   appName: 'rightnetiptv',
   webDir: 'dist',
   server: {
