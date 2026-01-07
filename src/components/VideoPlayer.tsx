@@ -441,15 +441,6 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
                 </Button>
               </div>
             </div>
-            {/* TV Mode Keyboard Hints */}
-            {isTVMode && (
-              <div className="flex justify-center gap-4 mt-2 text-xs text-white/60">
-                <span>M = মিউট</span>
-                <span>F = ফুলস্ক্রিন</span>
-                <span>← → = চ্যানেল নির্বাচন</span>
-                <span>ESC = বন্ধ</span>
-              </div>
-            )}
           </div>
         </div>
 
