@@ -196,14 +196,39 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   };
 
   const toggleFullscreen = async () => {
-    if (!containerRef.current) return;
+    const video = videoRef.current;
+    const container = containerRef.current;
+    if (!container) return;
+
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
     if (!document.fullscreenElement) {
-      await containerRef.current.requestFullscreen();
-      setIsFullscreen(true);
+      try {
+        await container.requestFullscreen();
+        setIsFullscreen(true);
+        
+        // Lock to landscape on mobile
+        if (isMobile && screen.orientation && 'lock' in screen.orientation) {
+          try {
+            await (screen.orientation as any).lock('landscape');
+          } catch (e) {
+            console.log('Orientation lock not supported');
+          }
+        }
+      } catch (e) {
+        // Fallback for iOS - use video element's webkitEnterFullscreen
+        if (video && 'webkitEnterFullscreen' in video) {
+          (video as any).webkitEnterFullscreen();
+        }
+      }
     } else {
       await document.exitFullscreen();
       setIsFullscreen(false);
+      
+      // Unlock orientation
+      if (isMobile && screen.orientation && 'unlock' in screen.orientation) {
+        (screen.orientation as any).unlock();
+      }
     }
   };
 
@@ -427,13 +452,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
           </div>
         </div>
 
-        {/* Info Section */}
-        <div className="p-4 border-t border-border/30">
-          <p className="text-muted-foreground">{channel.description}</p>
-          <p className="text-sm text-muted-foreground/60 mt-2">ক্যাটাগরি: {channel.category}</p>
-        </div>
-
-        {/* Channel Carousel - Toffeelive Style */}
+        {/* Channel Carousel - Below Player for PC/TV */}
         <div className="p-4 border-t border-border/30">
           <h3 className="font-display font-semibold mb-4 text-lg">Live</h3>
           <Carousel
@@ -519,6 +538,12 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
             <CarouselPrevious className="left-0 -translate-x-1/2 bg-background/80 hover:bg-background focus:ring-2 focus:ring-primary" />
             <CarouselNext className="right-0 translate-x-1/2 bg-background/80 hover:bg-background focus:ring-2 focus:ring-primary" />
           </Carousel>
+        </div>
+
+        {/* Info Section - At Bottom */}
+        <div className="p-4 border-t border-border/30">
+          <p className="text-muted-foreground">{channel.description}</p>
+          <p className="text-sm text-muted-foreground/60 mt-2">ক্যাটাগরি: {channel.category}</p>
         </div>
       </div>
     </div>
