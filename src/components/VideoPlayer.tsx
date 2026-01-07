@@ -358,6 +358,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
             playsInline
             autoPlay
             controls={false}
+            muted={isMuted}
           />
 
           {/* Loading State */}
