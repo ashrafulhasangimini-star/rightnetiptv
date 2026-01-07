@@ -90,12 +90,62 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
           }
         });
       } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS support (Safari)
-        video.src = streamUrl;
-        video.addEventListener('loadedmetadata', () => {
+        // Native HLS support (Safari/iOS)
+        // Check for HTTP streams - iOS blocks mixed content
+        if (streamUrl.startsWith('http://') && window.location.protocol === 'https:') {
+          setError("iOS এ HTTP স্ট্রিম সাপোর্ট করে না। HTTPS স্ট্রিম প্রয়োজন।");
           setIsLoading(false);
-          video.play().catch(() => {});
-        });
+          return;
+        }
+        
+        video.src = streamUrl;
+        
+        const handleLoadedMetadata = () => {
+          setIsLoading(false);
+          video.play().catch((err) => {
+            console.log('Autoplay blocked:', err);
+          });
+        };
+        
+        const handleError = () => {
+          const mediaError = video.error;
+          console.error('iOS Video Error:', mediaError);
+          
+          if (mediaError) {
+            switch (mediaError.code) {
+              case MediaError.MEDIA_ERR_NETWORK:
+                setError("নেটওয়ার্ক সমস্যা - স্ট্রিম লোড হচ্ছে না (iOS)");
+                break;
+              case MediaError.MEDIA_ERR_DECODE:
+                setError("মিডিয়া ডিকোড এরর");
+                break;
+              case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
+                setError("এই স্ট্রিম ফরম্যাট সাপোর্টেড নয়");
+                break;
+              default:
+                setError("স্ট্রিম লোড করা যাচ্ছে না");
+            }
+          } else {
+            setError("স্ট্রিম লোড করা যাচ্ছে না");
+          }
+          setIsLoading(false);
+        };
+        
+        const handleStalled = () => {
+          console.log('iOS: Stream stalled');
+          setError("স্ট্রিম থেমে গেছে - নেটওয়ার্ক চেক করুন");
+        };
+        
+        video.addEventListener('loadedmetadata', handleLoadedMetadata);
+        video.addEventListener('error', handleError);
+        video.addEventListener('stalled', handleStalled);
+        
+        // Cleanup
+        return () => {
+          video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+          video.removeEventListener('error', handleError);
+          video.removeEventListener('stalled', handleStalled);
+        };
       } else {
         setError("আপনার ব্রাউজার HLS সাপোর্ট করে না");
       }
