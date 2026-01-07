@@ -34,6 +34,8 @@ const isTV = () => {
 
 const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlayerProps) => {
   const [isMuted, setIsMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -170,8 +172,28 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   useEffect(() => {
     if (videoRef.current) {
       videoRef.current.muted = isMuted;
+      videoRef.current.volume = volume;
     }
-  }, [isMuted]);
+  }, [isMuted, volume]);
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newVolume = parseFloat(e.target.value);
+    setVolume(newVolume);
+    if (newVolume === 0) {
+      setIsMuted(true);
+    } else if (isMuted) {
+      setIsMuted(false);
+    }
+  };
+
+  const toggleMute = () => {
+    if (isMuted) {
+      setIsMuted(false);
+      if (volume === 0) setVolume(1);
+    } else {
+      setIsMuted(true);
+    }
+  };
 
   const toggleFullscreen = async () => {
     if (!containerRef.current) return;
@@ -341,17 +363,34 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
           {/* Video Controls */}
           <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+              <div 
+                className="flex items-center gap-2 relative"
+                onMouseEnter={() => setShowVolumeSlider(true)}
+                onMouseLeave={() => setShowVolumeSlider(false)}
+              >
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => setIsMuted(!isMuted)}
+                  onClick={toggleMute}
                   className="text-white hover:bg-white/10 focus:ring-2 focus:ring-white/50 focus:outline-none"
                   tabIndex={0}
                   aria-label={isMuted ? "আনমিউট করুন" : "মিউট করুন"}
                 >
-                  {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+                  {isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
                 </Button>
+                {/* Volume Slider */}
+                <div className={`flex items-center transition-all duration-300 overflow-hidden ${showVolumeSlider ? 'w-24 opacity-100' : 'w-0 opacity-0'}`}>
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={isMuted ? 0 : volume}
+                    onChange={handleVolumeChange}
+                    className="w-full h-1 bg-white/30 rounded-lg appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
+                    aria-label="ভলিউম"
+                  />
+                </div>
               </div>
               
               <div className="flex items-center gap-2">
