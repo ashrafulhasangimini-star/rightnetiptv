@@ -18,44 +18,28 @@ interface VideoPlayerProps {
   onChannelChange: (channel: Channel) => void;
 }
 
-// Device detection utilities
-const getDeviceInfo = () => {
-  if (typeof window === 'undefined') return { isTV: false, isMobile: false, isTablet: false, isIOS: false, isAndroid: false };
-  
+// Detect if running on Android TV or large screen TV
+const isTV = () => {
+  if (typeof window === 'undefined') return false;
   const ua = navigator.userAgent.toLowerCase();
-  
-  // TV detection
-  const isTV = ua.includes('android tv') || 
-               ua.includes('googletv') || 
-               ua.includes('smart-tv') ||
-               ua.includes('smarttv') ||
-               ua.includes('hbbtv') ||
-               ua.includes('tizen') ||
-               ua.includes('webos') ||
-               ua.includes('roku') ||
-               ua.includes('fire tv') ||
-               ua.includes('firetv') ||
-               ua.includes('apple tv') ||
-               ua.includes('appletv') ||
-               (window.innerWidth >= 1920 && !('ontouchstart' in window));
-  
-  // Mobile/Tablet detection
-  const isIOS = /iphone|ipad|ipod/.test(ua) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-  const isAndroid = /android/.test(ua) && !/android tv/.test(ua);
-  const isMobile = (isIOS || isAndroid) && window.innerWidth < 768;
-  const isTablet = (isIOS || isAndroid) && window.innerWidth >= 768 && window.innerWidth < 1024;
-  
-  return { isTV, isMobile, isTablet, isIOS, isAndroid };
+  return ua.includes('android tv') || 
+         ua.includes('googletv') || 
+         ua.includes('smart-tv') ||
+         ua.includes('smarttv') ||
+         ua.includes('hbbtv') ||
+         ua.includes('tizen') ||
+         ua.includes('webos') ||
+         (window.innerWidth >= 1920 && !('ontouchstart' in window));
 };
 
 const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlayerProps) => {
-  const [deviceInfo] = useState(getDeviceInfo);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(1);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [isTVMode] = useState(isTV);
   const [focusedChannelIndex, setFocusedChannelIndex] = useState(0);
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -216,13 +200,15 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
     const container = containerRef.current;
     if (!container) return;
 
+    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+
     if (!document.fullscreenElement) {
       try {
         await container.requestFullscreen();
         setIsFullscreen(true);
         
-        // Lock to landscape on mobile/tablet
-        if ((deviceInfo.isMobile || deviceInfo.isTablet) && screen.orientation && 'lock' in screen.orientation) {
+        // Lock to landscape on mobile
+        if (isMobile && screen.orientation && 'lock' in screen.orientation) {
           try {
             await (screen.orientation as any).lock('landscape');
           } catch (e) {
@@ -240,7 +226,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
       setIsFullscreen(false);
       
       // Unlock orientation
-      if ((deviceInfo.isMobile || deviceInfo.isTablet) && screen.orientation && 'unlock' in screen.orientation) {
+      if (isMobile && screen.orientation && 'unlock' in screen.orientation) {
         (screen.orientation as any).unlock();
       }
     }
@@ -306,30 +292,26 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  // Calculate responsive video height based on device
-  const getVideoContainerClass = () => {
-    if (isFullscreen) return "flex-1";
-    if (deviceInfo.isTV) return "flex-1 min-h-[70vh]";
-    if (deviceInfo.isMobile) return "aspect-video w-full";
-    if (deviceInfo.isTablet) return "aspect-video w-full max-h-[60vh]";
-    return "flex-1 min-h-[50vh] max-h-[75vh]"; // Desktop
-  };
+  // Focus on channel when index changes
+  useEffect(() => {
+    channelButtonsRef.current[focusedChannelIndex]?.focus();
+  }, [focusedChannelIndex]);
 
   return (
     <div ref={containerRef} className="fixed inset-0 z-50 bg-background animate-fade-in flex flex-col">
-      {/* Header with Channel Info - Hidden in fullscreen on mobile */}
-      <div className={`flex items-center justify-between p-2 sm:p-3 bg-card border-b border-border ${isFullscreen && deviceInfo.isMobile ? 'hidden' : ''}`}>
-        <div className="flex items-center gap-2 sm:gap-3">
+      {/* Header with Channel Info */}
+      <div className="flex items-center justify-between p-3 bg-card border-b border-border">
+        <div className="flex items-center gap-3">
           <img
             src={channel.logo}
             alt={channel.name}
-            className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg object-cover"
+            className="w-10 h-10 rounded-lg object-cover"
           />
           <div>
-            <h2 className="font-display font-semibold text-foreground text-sm sm:text-base">{channel.name}</h2>
-            <div className="flex items-center gap-2 text-[10px] sm:text-xs text-muted-foreground">
+            <h2 className="font-display font-semibold text-foreground">{channel.name}</h2>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               {channel.isLive && (
-                <span className="live-badge text-[10px] sm:text-xs">
+                <span className="live-badge text-xs">
                   <Radio className="w-2 h-2" />
                   LIVE
                 </span>
@@ -346,16 +328,16 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
           variant="ghost" 
           size="icon" 
           onClick={onClose}
-          className="text-foreground hover:bg-accent focus:ring-2 focus:ring-primary/50 h-8 w-8 sm:h-10 sm:w-10"
+          className="text-foreground hover:bg-accent focus:ring-2 focus:ring-primary/50"
           tabIndex={0}
           aria-label="বন্ধ করুন"
         >
-          <X className="w-5 h-5 sm:w-6 sm:h-6" />
+          <X className="w-6 h-6" />
         </Button>
       </div>
 
-      {/* Video Player Section - Responsive */}
-      <div className={`relative bg-black ${getVideoContainerClass()}`}>
+      {/* Video Player Section */}
+      <div className="flex-1 relative bg-black">
         <video
           ref={videoRef}
           className="w-full h-full object-contain"
@@ -447,8 +429,8 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
         </div>
       </div>
 
-      {/* Channel Carousel - Separate Section Below Player - Hidden in fullscreen on mobile */}
-      <div className={`bg-card border-t border-border p-2 sm:p-4 ${isFullscreen && deviceInfo.isMobile ? 'hidden' : ''}`}>
+      {/* Channel Carousel - Separate Section Below Player */}
+      <div className="bg-card border-t border-border p-4">
         <Carousel
           opts={{
             align: "start",
@@ -494,8 +476,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
                   }}
                 >
                   <div className="relative">
-                    <div className={`rounded-full overflow-hidden border-2 border-border bg-muted transition-all duration-300 group-hover:border-primary group-hover:scale-105 group-focus:border-primary group-focus:scale-110 group-focus:ring-4 group-focus:ring-primary/50 shadow-lg
-                      ${deviceInfo.isTV ? 'w-20 h-20 lg:w-24 lg:h-24' : 'w-12 h-12 sm:w-14 sm:h-14 md:w-16 md:h-16'}`}>
+                    <div className="w-14 h-14 md:w-16 md:h-16 rounded-full overflow-hidden border-2 border-border bg-muted transition-all duration-300 group-hover:border-primary group-hover:scale-105 group-focus:border-primary group-focus:scale-110 group-focus:ring-4 group-focus:ring-primary/50 shadow-lg">
                       {ch.logo ? (
                         <img
                           src={ch.logo}
@@ -515,16 +496,15 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
                       </div>
                     )}
                   </div>
-                  <p className={`text-center truncate text-muted-foreground group-hover:text-foreground group-focus:text-primary transition-colors
-                    ${deviceInfo.isTV ? 'text-sm max-w-[100px]' : 'text-[10px] max-w-[50px] sm:max-w-[60px]'}`}>
+                  <p className="text-[10px] text-center max-w-[60px] truncate text-muted-foreground group-hover:text-foreground group-focus:text-primary transition-colors">
                     {ch.name}
                   </p>
                 </button>
               </CarouselItem>
             ))}
           </CarouselContent>
-          <CarouselPrevious className={`left-0 -translate-x-1/2 bg-background hover:bg-accent border-border focus:ring-2 focus:ring-primary ${deviceInfo.isMobile ? 'hidden' : ''}`} />
-          <CarouselNext className={`right-0 translate-x-1/2 bg-background hover:bg-accent border-border focus:ring-2 focus:ring-primary ${deviceInfo.isMobile ? 'hidden' : ''}`} />
+          <CarouselPrevious className="left-0 -translate-x-1/2 bg-background hover:bg-accent border-border focus:ring-2 focus:ring-primary" />
+          <CarouselNext className="right-0 translate-x-1/2 bg-background hover:bg-accent border-border focus:ring-2 focus:ring-primary" />
         </Carousel>
       </div>
     </div>
