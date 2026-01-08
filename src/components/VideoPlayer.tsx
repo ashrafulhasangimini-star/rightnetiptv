@@ -298,59 +298,46 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   }, [focusedChannelIndex]);
 
   return (
-    <div ref={containerRef} className="fixed inset-0 z-50 bg-background/95 backdrop-blur-xl animate-fade-in overflow-y-auto">
-      {/* Floating Close Button - Always visible on TV, hover on desktop/mobile */}
-      <div className={`fixed top-0 right-0 z-[60] p-4 ${isTVMode ? '' : 'group/close'}`}>
-        {/* Large hover trigger area - only for non-TV */}
-        {!isTVMode && <div className="absolute inset-0 w-28 h-28" />}
-        <Button 
-          ref={closeButtonRef}
-          variant="destructive" 
-          size="icon" 
-          onClick={onClose}
-          className={`h-12 w-12 rounded-full shadow-xl transition-all duration-300 
-            focus:ring-4 focus:ring-destructive/50 focus:outline-none focus:scale-110
-            ${isTVMode 
-              ? 'opacity-100 scale-100' 
-              : 'opacity-0 scale-75 group-hover/close:opacity-100 group-hover/close:scale-100'
-            }`}
-          tabIndex={0}
-          aria-label="বন্ধ করুন"
-        >
-          <X className="w-6 h-6" />
-        </Button>
+    <div ref={containerRef} className="fixed inset-0 z-50 bg-black animate-fade-in">
+      {/* Close Button */}
+      <Button 
+        ref={closeButtonRef}
+        variant="ghost" 
+        size="icon" 
+        onClick={onClose}
+        className="absolute top-4 right-4 z-50 text-white hover:bg-white/20 focus:ring-2 focus:ring-white/50"
+        tabIndex={0}
+        aria-label="বন্ধ করুন"
+      >
+        <X className="w-6 h-6" />
+      </Button>
+
+      {/* Channel Info - Top Left */}
+      <div className="absolute top-4 left-4 z-50 flex items-center gap-3">
+        <img
+          src={channel.logo}
+          alt={channel.name}
+          className="w-10 h-10 rounded-lg object-cover"
+        />
+        <div>
+          <h2 className="font-display font-semibold text-white">{channel.name}</h2>
+          <div className="flex items-center gap-2 text-xs text-white/70">
+            {channel.isLive && (
+              <span className="live-badge text-xs">
+                <Radio className="w-2 h-2" />
+                LIVE
+              </span>
+            )}
+            <span className="flex items-center gap-1">
+              <Users className="w-3 h-3" />
+              {channel.viewers.toLocaleString()}
+            </span>
+          </div>
+        </div>
       </div>
 
-      <div className="min-h-full flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-border/30">
-          <div className="flex items-center gap-4">
-            <img
-              src={channel.logo}
-              alt={channel.name}
-              className="w-12 h-12 rounded-lg object-cover"
-            />
-            <div>
-              <h2 className="font-display font-semibold text-lg">{channel.name}</h2>
-              <div className="flex items-center gap-3 text-sm text-muted-foreground">
-                {channel.isLive && (
-                  <span className="live-badge">
-                    <Radio className="w-3 h-3" />
-                    LIVE
-                  </span>
-                )}
-                <span className="flex items-center gap-1">
-                  <Users className="w-4 h-4" />
-                  {channel.viewers.toLocaleString()} দর্শক
-                </span>
-              </div>
-            </div>
-          </div>
-          
-        </div>
-
-        {/* Video Area */}
-        <div className="relative bg-black flex items-center justify-center" style={{ minHeight: '50vh', maxHeight: '70vh' }}>
+      {/* Full Screen Video */}
+      <div className="absolute inset-0">
           {/* Video Element */}
           <video
             ref={videoRef}
@@ -386,8 +373,8 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
             </div>
           )}
 
-          {/* Video Controls */}
-          <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
+          {/* Video Controls - Bottom */}
+          <div className="absolute bottom-0 left-0 right-0 z-30 p-4 pb-32 bg-gradient-to-t from-black/80 to-transparent">
             <div className="flex items-center justify-between">
               <div 
                 className="flex items-center gap-2 relative"
@@ -444,99 +431,83 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
           </div>
         </div>
 
-        {/* Channel Carousel - Below Player for PC/TV */}
-        <div className="p-4 border-t border-border/30">
-          <h3 className="font-display font-semibold mb-4 text-lg">Live</h3>
-          <Carousel
-            opts={{
-              align: "start",
-              loop: true,
-              dragFree: true,
-            }}
-            className="w-full"
-          >
-            <CarouselContent className="-ml-3">
-              {otherChannels.map((ch, index) => (
-                  <CarouselItem key={ch.id} className="pl-3 basis-auto">
-                    <button
-                      ref={(el) => { channelButtonsRef.current[index] = el; }}
-                      type="button"
-                      className={`flex flex-col items-center gap-2 cursor-pointer group outline-none
-                        ${isTVMode ? 'tv:w-24 tv:h-24' : ''}
-                        focus:scale-110 transition-transform duration-200`}
-                      tabIndex={0}
-                      onFocus={() => setFocusedChannelIndex(index)}
-                      onPointerDown={(e) => {
-                        carouselPointerStartRef.current = {
-                          x: e.clientX,
-                          y: e.clientY,
-                        };
-                      }}
-                      onPointerUp={(e) => {
-                        const start = carouselPointerStartRef.current;
-                        carouselPointerStartRef.current = null;
-                        if (!start) return;
+      {/* Channel Carousel - Fixed at Bottom */}
+      <div className="absolute bottom-4 left-0 right-0 z-40 px-4">
+        <Carousel
+          opts={{
+            align: "start",
+            loop: true,
+            dragFree: true,
+          }}
+          className="w-full"
+        >
+          <CarouselContent className="-ml-2">
+            {otherChannels.map((ch, index) => (
+              <CarouselItem key={ch.id} className="pl-2 basis-auto">
+                <button
+                  ref={(el) => { channelButtonsRef.current[index] = el; }}
+                  type="button"
+                  className="flex flex-col items-center gap-1 cursor-pointer group outline-none focus:scale-110 transition-transform duration-200"
+                  tabIndex={0}
+                  onFocus={() => setFocusedChannelIndex(index)}
+                  onPointerDown={(e) => {
+                    carouselPointerStartRef.current = {
+                      x: e.clientX,
+                      y: e.clientY,
+                    };
+                  }}
+                  onPointerUp={(e) => {
+                    const start = carouselPointerStartRef.current;
+                    carouselPointerStartRef.current = null;
+                    if (!start) return;
 
-                        const dx = Math.abs(e.clientX - start.x);
-                        const dy = Math.abs(e.clientY - start.y);
-                        const isTap = dx < 8 && dy < 8;
-                        if (!isTap) return;
+                    const dx = Math.abs(e.clientX - start.x);
+                    const dy = Math.abs(e.clientY - start.y);
+                    const isTap = dx < 8 && dy < 8;
+                    if (!isTap) return;
 
-                        e.preventDefault();
-                        e.stopPropagation();
-                        onChannelChange(ch);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' || e.key === ' ') {
-                          e.preventDefault();
-                          onChannelChange(ch);
-                        }
-                      }}
-                    >
-                      {/* Circular Channel Logo */}
-                      <div className="relative">
-                        <div className={`w-16 h-16 md:w-20 md:h-20 ${isTVMode ? 'lg:w-24 lg:h-24' : ''} rounded-full overflow-hidden border-2 border-white/80 bg-muted transition-all duration-300 
-                          group-hover:border-primary group-hover:scale-105 
-                          group-focus:border-primary group-focus:scale-110 group-focus:ring-4 group-focus:ring-primary/50
-                          shadow-lg`}>
-                          {ch.logo ? (
-                            <img
-                              src={ch.logo}
-                              alt={ch.name}
-                              className="w-full h-full object-cover"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/30 to-primary/10 text-xl font-bold text-primary">
-                              {ch.name.charAt(0).toUpperCase()}
-                            </div>
-                          )}
+                    e.preventDefault();
+                    e.stopPropagation();
+                    onChannelChange(ch);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onChannelChange(ch);
+                    }
+                  }}
+                >
+                  <div className="relative">
+                    <div className="w-14 h-14 md:w-16 md:h-16 rounded-full overflow-hidden border-2 border-white/60 bg-black/50 transition-all duration-300 group-hover:border-primary group-hover:scale-105 group-focus:border-primary group-focus:scale-110 group-focus:ring-4 group-focus:ring-primary/50 shadow-lg">
+                      {ch.logo ? (
+                        <img
+                          src={ch.logo}
+                          alt={ch.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/30 to-primary/10 text-lg font-bold text-primary">
+                          {ch.name.charAt(0).toUpperCase()}
                         </div>
-                        {/* Live Badge */}
-                        {ch.isLive && (
-                          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-destructive text-destructive-foreground text-[9px] px-2 py-0.5 rounded-full font-semibold flex items-center gap-0.5 shadow-md">
-                            <Radio className="w-2 h-2" />
-                            LIVE
-                          </div>
-                        )}
+                      )}
+                    </div>
+                    {ch.isLive && (
+                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-destructive text-destructive-foreground text-[8px] px-1.5 py-0.5 rounded-full font-semibold flex items-center gap-0.5 shadow-md">
+                        <Radio className="w-2 h-2" />
+                        LIVE
                       </div>
-                      {/* Channel Name */}
-                      <p className={`text-xs text-center max-w-[80px] ${isTVMode ? 'lg:max-w-[100px] lg:text-sm' : ''} truncate text-muted-foreground group-hover:text-foreground group-focus:text-primary transition-colors`}>
-                        {ch.name}
-                      </p>
-                    </button>
-                  </CarouselItem>
-                ))}
-            </CarouselContent>
-            <CarouselPrevious className="left-0 -translate-x-1/2 bg-background/80 hover:bg-background focus:ring-2 focus:ring-primary" />
-            <CarouselNext className="right-0 translate-x-1/2 bg-background/80 hover:bg-background focus:ring-2 focus:ring-primary" />
-          </Carousel>
-        </div>
-
-        {/* Info Section - At Bottom */}
-        <div className="p-4 border-t border-border/30">
-          <p className="text-muted-foreground">{channel.description}</p>
-          <p className="text-sm text-muted-foreground/60 mt-2">ক্যাটাগরি: {channel.category}</p>
-        </div>
+                    )}
+                  </div>
+                  <p className="text-[10px] text-center max-w-[60px] truncate text-white/70 group-hover:text-white group-focus:text-primary transition-colors">
+                    {ch.name}
+                  </p>
+                </button>
+              </CarouselItem>
+            ))}
+          </CarouselContent>
+          <CarouselPrevious className="left-0 -translate-x-1/2 bg-black/50 hover:bg-black/70 text-white border-white/20 focus:ring-2 focus:ring-primary" />
+          <CarouselNext className="right-0 translate-x-1/2 bg-black/50 hover:bg-black/70 text-white border-white/20 focus:ring-2 focus:ring-primary" />
+        </Carousel>
       </div>
     </div>
   );
