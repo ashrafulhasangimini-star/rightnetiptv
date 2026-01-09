@@ -16,6 +16,14 @@ const config: CapacitorConfig = {
     buildOptions: {
       releaseType: 'release'
     }
+  },
+  ios: {
+    // iOS specific settings for HTTP video playback
+    preferredConfig: {
+      scheme: 'capacitor://',
+      iosScheme: 'capacitor',
+      hostname: 'localhost'
+    }
   }
 };
 

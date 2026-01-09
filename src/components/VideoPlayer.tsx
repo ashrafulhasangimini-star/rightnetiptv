@@ -66,9 +66,11 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
 
     const streamUrl = channel.streamUrl;
     const isHLS = streamUrl.includes('.m3u8');
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isLocalStream = streamUrl.includes('localhost') || streamUrl.includes('192.168') || streamUrl.includes('10.0');
 
     // Video.js options - using default controls
-    const options = {
+    const options: any = {
       autoplay: true,
       controls: true,
       responsive: true,
@@ -78,14 +80,16 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
       liveui: true,
       html5: {
         vhs: {
-          overrideNative: true,
+          overrideNative: !isIOS, // Use native player on iOS for HLS
           enableLowInitialPlaylist: true,
           smoothQualityChange: true,
           fastQualityChange: true,
+          maxPlaylistRetries: 5,
+          timeout: 45000,
         },
-        nativeVideoTracks: false,
-        nativeAudioTracks: false,
-        nativeTextTracks: false,
+        nativeVideoTracks: isIOS,
+        nativeAudioTracks: isIOS,
+        nativeTextTracks: isIOS,
       },
       sources: [{
         src: streamUrl,
