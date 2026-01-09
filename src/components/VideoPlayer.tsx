@@ -1,5 +1,5 @@
 import { Channel } from "@/types/channel";
-import { X, Volume2, VolumeX, Maximize, Minimize, Users, Radio, AlertCircle } from "lucide-react";
+import { X, Users, Radio, AlertCircle } from "lucide-react";
 import { Button } from "./ui/button";
 import { useState, useRef, useEffect, useCallback } from "react";
 import videojs from "video.js";
@@ -34,10 +34,6 @@ const isTV = () => {
 };
 
 const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlayerProps) => {
-  const [isMuted, setIsMuted] = useState(false);
-  const [volume, setVolume] = useState(1);
-  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isTVMode] = useState(isTV);
@@ -64,22 +60,22 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
 
     // Create video element
     const videoElement = document.createElement("video-js");
-    videoElement.classList.add("vjs-big-play-centered", "vjs-fluid");
+    videoElement.classList.add("vjs-big-play-centered");
     videoRef.current.innerHTML = '';
     videoRef.current.appendChild(videoElement);
 
     const streamUrl = channel.streamUrl;
     const isHLS = streamUrl.includes('.m3u8');
 
-    // Video.js options
+    // Video.js options - using default controls
     const options = {
       autoplay: true,
-      controls: false,
+      controls: true,
       responsive: true,
       fluid: true,
       preload: 'auto',
-      muted: isMuted,
       playsinline: true,
+      liveui: true,
       html5: {
         vhs: {
           overrideNative: true,
@@ -157,81 +153,6 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
     };
   }, [channel.streamUrl]);
 
-  // Sync mute and volume with player
-  useEffect(() => {
-    if (playerRef.current) {
-      playerRef.current.muted(isMuted);
-      playerRef.current.volume(volume);
-    }
-  }, [isMuted, volume]);
-
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newVolume = parseFloat(e.target.value);
-    setVolume(newVolume);
-    if (newVolume === 0) {
-      setIsMuted(true);
-    } else if (isMuted) {
-      setIsMuted(false);
-    }
-  };
-
-  const toggleMute = () => {
-    if (isMuted) {
-      setIsMuted(false);
-      if (volume === 0) setVolume(1);
-    } else {
-      setIsMuted(true);
-    }
-  };
-
-  const toggleFullscreen = async () => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-
-    if (!document.fullscreenElement) {
-      try {
-        await container.requestFullscreen();
-        setIsFullscreen(true);
-        
-        if (isMobile && screen.orientation && 'lock' in screen.orientation) {
-          try {
-            await (screen.orientation as any).lock('landscape');
-          } catch (e) {
-            console.log('Orientation lock not supported');
-          }
-        }
-      } catch (e) {
-        // Fallback for iOS
-        if (playerRef.current) {
-          const videoEl = playerRef.current.el().querySelector('video');
-          if (videoEl && 'webkitEnterFullscreen' in videoEl) {
-            (videoEl as any).webkitEnterFullscreen();
-          }
-        }
-      }
-    } else {
-      await document.exitFullscreen();
-      setIsFullscreen(false);
-      
-      if (isMobile && screen.orientation && 'unlock' in screen.orientation) {
-        (screen.orientation as any).unlock();
-      }
-    }
-  };
-
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => {
-      document.removeEventListener('fullscreenchange', handleFullscreenChange);
-    };
-  }, []);
-
   // Keyboard/D-pad navigation for TV
   const otherChannels = channels.filter((ch) => ch.id !== channel.id);
 
@@ -259,19 +180,8 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
         e.preventDefault();
         channelButtonsRef.current[focusedChannelIndex]?.focus();
         break;
-      case 'Enter':
-      case ' ':
-        break;
-      case 'm':
-      case 'M':
-        setIsMuted(!isMuted);
-        break;
-      case 'f':
-      case 'F':
-        toggleFullscreen();
-        break;
     }
-  }, [onClose, otherChannels.length, focusedChannelIndex, isMuted]);
+  }, [onClose, otherChannels.length, focusedChannelIndex]);
 
   useEffect(() => {
     document.addEventListener('keydown', handleKeyDown);
@@ -349,53 +259,6 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
             </div>
           </div>
         )}
-
-        {/* Video Controls */}
-        <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/80 to-transparent">
-          <div className="flex items-center justify-between">
-            <div 
-              className="flex items-center gap-2 relative"
-              onMouseEnter={() => setShowVolumeSlider(true)}
-              onMouseLeave={() => setShowVolumeSlider(false)}
-            >
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={toggleMute}
-                className="text-white hover:bg-white/10 focus:ring-2 focus:ring-white/50 focus:outline-none"
-                tabIndex={0}
-                aria-label={isMuted ? "আনমিউট করুন" : "মিউট করুন"}
-              >
-                {isMuted || volume === 0 ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
-              </Button>
-              <div className={`flex items-center transition-all duration-300 overflow-hidden ${showVolumeSlider ? 'w-24 opacity-100' : 'w-0 opacity-0'}`}>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={isMuted ? 0 : volume}
-                  onChange={handleVolumeChange}
-                  className="w-full h-1 bg-white/30 rounded-lg appearance-none cursor-pointer accent-primary [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white"
-                  aria-label="ভলিউম"
-                />
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="text-white hover:bg-white/10 focus:ring-2 focus:ring-white/50 focus:outline-none"
-                onClick={toggleFullscreen}
-                tabIndex={0}
-                aria-label={isFullscreen ? "ছোট করুন" : "ফুলস্ক্রিন"}
-              >
-                {isFullscreen ? <Minimize className="w-5 h-5" /> : <Maximize className="w-5 h-5" />}
-              </Button>
-            </div>
-          </div>
-        </div>
       </div>
 
       {/* Channel Carousel - Separate Section Below Player */}
