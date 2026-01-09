@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useEffect } from "react";
 
 export interface Channel {
   id: string;
@@ -22,7 +23,9 @@ export interface Channel {
 }
 
 export const useChannels = () => {
-  return useQuery({
+  const queryClient = useQueryClient();
+
+  const query = useQuery({
     queryKey: ["channels"],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -37,6 +40,35 @@ export const useChannels = () => {
       return data as Channel[];
     },
   });
+
+  // Real-time subscription for viewer count updates
+  useEffect(() => {
+    const subscription = supabase
+      .channel("channels-updates")
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "channels",
+        },
+        (payload) => {
+          queryClient.setQueryData(["channels"], (oldData: Channel[] | undefined) => {
+            if (!oldData) return oldData;
+            return oldData.map((ch) =>
+              ch.id === payload.new.id ? { ...ch, ...payload.new } : ch
+            );
+          });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      subscription.unsubscribe();
+    };
+  }, [queryClient]);
+
+  return query;
 };
 
 export const useCreateChannel = () => {

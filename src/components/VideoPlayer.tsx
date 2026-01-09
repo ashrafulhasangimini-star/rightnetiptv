@@ -11,6 +11,7 @@ import {
   CarouselNext,
   CarouselPrevious,
 } from "./ui/carousel";
+import { incrementViewerCount, decrementViewerCount } from "@/lib/viewerUtils";
 
 interface VideoPlayerProps {
   channel: Channel;
@@ -44,6 +45,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const channelButtonsRef = useRef<(HTMLButtonElement | null)[]>([]);
   const carouselPointerStartRef = useRef<{ x: number; y: number } | null>(null);
+  const viewerCountTrackedRef = useRef(false);
 
   // Initialize Video.js player
   useEffect(() => {
@@ -156,6 +158,39 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
       }
     };
   }, [channel.streamUrl]);
+
+  // Track viewer count - increment when player opens, decrement when closes
+  useEffect(() => {
+    const trackViewer = async () => {
+      try {
+        if (!viewerCountTrackedRef.current && channel.id) {
+          await incrementViewerCount(channel.id);
+          viewerCountTrackedRef.current = true;
+          console.log(`Viewer count incremented for channel: ${channel.name}`);
+        }
+      } catch (error) {
+        console.error("Failed to update viewer count:", error);
+      }
+    };
+
+    trackViewer();
+
+    return () => {
+      // Decrement viewer count when component unmounts
+      const untrackViewer = async () => {
+        try {
+          if (viewerCountTrackedRef.current && channel.id) {
+            await decrementViewerCount(channel.id);
+            viewerCountTrackedRef.current = false;
+            console.log(`Viewer count decremented for channel: ${channel.name}`);
+          }
+        } catch (error) {
+          console.error("Failed to update viewer count:", error);
+        }
+      };
+      untrackViewer();
+    };
+  }, [channel.id, channel.name]);
 
   // Keyboard/D-pad navigation for TV
   const otherChannels = channels.filter((ch) => ch.id !== channel.id);
