@@ -1,8 +1,9 @@
 import { Channel } from "@/types/channel";
-import { X, Volume2, VolumeX, Maximize, Minimize, Settings, Users, Radio, AlertCircle } from "lucide-react";
+import { X, Volume2, VolumeX, Maximize, Minimize, Users, Radio, AlertCircle } from "lucide-react";
 import { Button } from "./ui/button";
 import { useState, useRef, useEffect, useCallback } from "react";
-import Hls from "hls.js";
+import videojs from "video.js";
+import "video.js/dist/video-js.css";
 import {
   Carousel,
   CarouselContent,
@@ -41,138 +42,126 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   const [error, setError] = useState<string | null>(null);
   const [isTVMode] = useState(isTV);
   const [focusedChannelIndex, setFocusedChannelIndex] = useState(0);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLDivElement>(null);
+  const playerRef = useRef<ReturnType<typeof videojs> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const hlsRef = useRef<Hls | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const channelButtonsRef = useRef<(HTMLButtonElement | null)[]>([]);
   const carouselPointerStartRef = useRef<{ x: number; y: number } | null>(null);
 
+  // Initialize Video.js player
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !channel.streamUrl) return;
+    if (!videoRef.current || !channel.streamUrl) return;
 
-    const streamUrl = channel.streamUrl;
-
-    // Check if it's an HLS stream (.m3u8)
-    if (streamUrl.includes('.m3u8')) {
-      if (Hls.isSupported()) {
-        const hls = new Hls({
-          enableWorker: true,
-          lowLatencyMode: true,
-        });
-        
-        hlsRef.current = hls;
-        hls.loadSource(streamUrl);
-        hls.attachMedia(video);
-        
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          setIsLoading(false);
-          video.play().catch(() => {
-            // Autoplay blocked, user needs to interact
-          });
-        });
-
-        hls.on(Hls.Events.ERROR, (_, data) => {
-          if (data.fatal) {
-            switch (data.type) {
-              case Hls.ErrorTypes.NETWORK_ERROR:
-                setError("নেটওয়ার্ক সমস্যা - স্ট্রিম লোড হচ্ছে না");
-                hls.startLoad();
-                break;
-              case Hls.ErrorTypes.MEDIA_ERROR:
-                setError("মিডিয়া এরর - পুনরায় চেষ্টা করা হচ্ছে");
-                hls.recoverMediaError();
-                break;
-              default:
-                setError("স্ট্রিম প্লে করা যাচ্ছে না");
-                hls.destroy();
-                break;
-            }
-          }
-        });
-      } else if (video.canPlayType('application/vnd.apple.mpegurl')) {
-        // Native HLS support (Safari/iOS)
-        // Check for HTTP streams - iOS blocks mixed content
-        if (streamUrl.startsWith('http://') && window.location.protocol === 'https:') {
-          setError("iOS এ HTTP স্ট্রিম সাপোর্ট করে না। HTTPS স্ট্রিম প্রয়োজন।");
-          setIsLoading(false);
-          return;
-        }
-        
-        video.src = streamUrl;
-        
-        const handleLoadedMetadata = () => {
-          setIsLoading(false);
-          video.play().catch((err) => {
-            console.log('Autoplay blocked:', err);
-          });
-        };
-        
-        const handleError = () => {
-          const mediaError = video.error;
-          console.error('iOS Video Error:', mediaError);
-          
-          if (mediaError) {
-            switch (mediaError.code) {
-              case MediaError.MEDIA_ERR_NETWORK:
-                setError("নেটওয়ার্ক সমস্যা - স্ট্রিম লোড হচ্ছে না (iOS)");
-                break;
-              case MediaError.MEDIA_ERR_DECODE:
-                setError("মিডিয়া ডিকোড এরর");
-                break;
-              case MediaError.MEDIA_ERR_SRC_NOT_SUPPORTED:
-                setError("এই স্ট্রিম ফরম্যাট সাপোর্টেড নয়");
-                break;
-              default:
-                setError("স্ট্রিম লোড করা যাচ্ছে না");
-            }
-          } else {
-            setError("স্ট্রিম লোড করা যাচ্ছে না");
-          }
-          setIsLoading(false);
-        };
-        
-        const handleStalled = () => {
-          console.log('iOS: Stream stalled');
-          setError("স্ট্রিম থেমে গেছে - নেটওয়ার্ক চেক করুন");
-        };
-        
-        video.addEventListener('loadedmetadata', handleLoadedMetadata);
-        video.addEventListener('error', handleError);
-        video.addEventListener('stalled', handleStalled);
-        
-        // Cleanup
-        return () => {
-          video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-          video.removeEventListener('error', handleError);
-          video.removeEventListener('stalled', handleStalled);
-        };
-      } else {
-        setError("আপনার ব্রাউজার HLS সাপোর্ট করে না");
-      }
-    } else {
-      // Direct video URL (mp4, webm, etc.)
-      video.src = streamUrl;
-      video.addEventListener('loadeddata', () => {
-        setIsLoading(false);
-      });
-      video.addEventListener('error', () => {
-        setError("ভিডিও লোড করা যাচ্ছে না");
-      });
+    // Clean up previous player
+    if (playerRef.current) {
+      playerRef.current.dispose();
+      playerRef.current = null;
     }
 
+    setIsLoading(true);
+    setError(null);
+
+    // Create video element
+    const videoElement = document.createElement("video-js");
+    videoElement.classList.add("vjs-big-play-centered", "vjs-fluid");
+    videoRef.current.innerHTML = '';
+    videoRef.current.appendChild(videoElement);
+
+    const streamUrl = channel.streamUrl;
+    const isHLS = streamUrl.includes('.m3u8');
+
+    // Video.js options
+    const options = {
+      autoplay: true,
+      controls: false,
+      responsive: true,
+      fluid: true,
+      preload: 'auto',
+      muted: isMuted,
+      playsinline: true,
+      html5: {
+        vhs: {
+          overrideNative: true,
+          enableLowInitialPlaylist: true,
+          smoothQualityChange: true,
+          fastQualityChange: true,
+        },
+        nativeVideoTracks: false,
+        nativeAudioTracks: false,
+        nativeTextTracks: false,
+      },
+      sources: [{
+        src: streamUrl,
+        type: isHLS ? 'application/x-mpegURL' : 'video/mp4'
+      }]
+    };
+
+    // Initialize player
+    const player = videojs(videoElement, options, function onPlayerReady() {
+      console.log('Video.js player is ready');
+      
+      player.on('loadeddata', () => {
+        setIsLoading(false);
+      });
+
+      player.on('playing', () => {
+        setIsLoading(false);
+      });
+
+      player.on('waiting', () => {
+        setIsLoading(true);
+      });
+
+      player.on('canplay', () => {
+        setIsLoading(false);
+      });
+
+      player.on('error', () => {
+        const err = player.error();
+        console.error('Video.js error:', err);
+        
+        if (err) {
+          switch (err.code) {
+            case 1:
+              setError("মিডিয়া লোড বাতিল হয়েছে");
+              break;
+            case 2:
+              setError("নেটওয়ার্ক সমস্যা - স্ট্রিম লোড হচ্ছে না");
+              break;
+            case 3:
+              setError("মিডিয়া ডিকোড এরর");
+              break;
+            case 4:
+              setError("এই স্ট্রিম ফরম্যাট সাপোর্টেড নয়");
+              break;
+            default:
+              setError("স্ট্রিম প্লে করা যাচ্ছে না");
+          }
+        }
+        setIsLoading(false);
+      });
+
+      player.on('stalled', () => {
+        console.log('Stream stalled');
+      });
+    });
+
+    playerRef.current = player;
+
     return () => {
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
+      if (playerRef.current) {
+        playerRef.current.dispose();
+        playerRef.current = null;
       }
     };
   }, [channel.streamUrl]);
 
+  // Sync mute and volume with player
   useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.muted = isMuted;
-      videoRef.current.volume = volume;
+    if (playerRef.current) {
+      playerRef.current.muted(isMuted);
+      playerRef.current.volume(volume);
     }
   }, [isMuted, volume]);
 
@@ -196,7 +185,6 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   };
 
   const toggleFullscreen = async () => {
-    const video = videoRef.current;
     const container = containerRef.current;
     if (!container) return;
 
@@ -207,7 +195,6 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
         await container.requestFullscreen();
         setIsFullscreen(true);
         
-        // Lock to landscape on mobile
         if (isMobile && screen.orientation && 'lock' in screen.orientation) {
           try {
             await (screen.orientation as any).lock('landscape');
@@ -216,16 +203,18 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
           }
         }
       } catch (e) {
-        // Fallback for iOS - use video element's webkitEnterFullscreen
-        if (video && 'webkitEnterFullscreen' in video) {
-          (video as any).webkitEnterFullscreen();
+        // Fallback for iOS
+        if (playerRef.current) {
+          const videoEl = playerRef.current.el().querySelector('video');
+          if (videoEl && 'webkitEnterFullscreen' in videoEl) {
+            (videoEl as any).webkitEnterFullscreen();
+          }
         }
       }
     } else {
       await document.exitFullscreen();
       setIsFullscreen(false);
       
-      // Unlock orientation
       if (isMobile && screen.orientation && 'unlock' in screen.orientation) {
         (screen.orientation as any).unlock();
       }
@@ -247,14 +236,12 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   const otherChannels = channels.filter((ch) => ch.id !== channel.id);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    // ESC or Android Back button to close
     if (e.key === 'Escape' || e.key === 'Backspace' || e.keyCode === 27) {
       e.preventDefault();
       onClose();
       return;
     }
 
-    // D-pad navigation
     switch (e.key) {
       case 'ArrowLeft':
         e.preventDefault();
@@ -274,7 +261,6 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
         break;
       case 'Enter':
       case ' ':
-        // Let the focused element handle it
         break;
       case 'm':
       case 'M':
@@ -292,7 +278,6 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
     return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  // Focus on channel when index changes
   useEffect(() => {
     channelButtonsRef.current[focusedChannelIndex]?.focus();
   }, [focusedChannelIndex]);
@@ -338,18 +323,11 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
 
       {/* Video Player Section */}
       <div className="flex-1 relative bg-black">
-        <video
-          ref={videoRef}
-          className="w-full h-full object-contain"
-          playsInline
-          autoPlay
-          controls={false}
-          muted={isMuted}
-        />
+        <div ref={videoRef} className="w-full h-full video-js-container" />
 
         {/* Loading State */}
         {isLoading && !error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
             <div className="text-center">
               <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4 animate-pulse">
                 <Radio className="w-8 h-8 text-primary" />
@@ -405,15 +383,6 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
             </div>
             
             <div className="flex items-center gap-2">
-              <Button 
-                variant="ghost" 
-                size="icon" 
-                className="text-white hover:bg-white/10 focus:ring-2 focus:ring-white/50 focus:outline-none"
-                tabIndex={0}
-                aria-label="সেটিংস"
-              >
-                <Settings className="w-5 h-5" />
-              </Button>
               <Button 
                 variant="ghost" 
                 size="icon" 
@@ -476,35 +445,24 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
                   }}
                 >
                   <div className="relative">
-                    <div className="w-14 h-14 md:w-16 md:h-16 rounded-full overflow-hidden border-2 border-border bg-muted transition-all duration-300 group-hover:border-primary group-hover:scale-105 group-focus:border-primary group-focus:scale-110 group-focus:ring-4 group-focus:ring-primary/50 shadow-lg">
-                      {ch.logo ? (
-                        <img
-                          src={ch.logo}
-                          alt={ch.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-primary/30 to-primary/10 text-lg font-bold text-primary">
-                          {ch.name.charAt(0).toUpperCase()}
-                        </div>
-                      )}
-                    </div>
+                    <img
+                      src={ch.logo}
+                      alt={ch.name}
+                      className="w-14 h-14 md:w-16 md:h-16 rounded-lg object-cover border-2 border-transparent group-hover:border-primary group-focus:border-primary transition-colors"
+                    />
                     {ch.isLive && (
-                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 bg-destructive text-destructive-foreground text-[8px] px-1.5 py-0.5 rounded-full font-semibold flex items-center gap-0.5 shadow-md">
-                        <Radio className="w-2 h-2" />
-                        LIVE
-                      </div>
+                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
                     )}
                   </div>
-                  <p className="text-[10px] text-center max-w-[60px] truncate text-muted-foreground group-hover:text-foreground group-focus:text-primary transition-colors">
+                  <span className="text-xs text-muted-foreground group-hover:text-foreground group-focus:text-foreground transition-colors text-center max-w-16 truncate">
                     {ch.name}
-                  </p>
+                  </span>
                 </button>
               </CarouselItem>
             ))}
           </CarouselContent>
-          <CarouselPrevious className="left-0 -translate-x-1/2 bg-background hover:bg-accent border-border focus:ring-2 focus:ring-primary" />
-          <CarouselNext className="right-0 translate-x-1/2 bg-background hover:bg-accent border-border focus:ring-2 focus:ring-primary" />
+          <CarouselPrevious className="hidden md:flex -left-2" />
+          <CarouselNext className="hidden md:flex -right-2" />
         </Carousel>
       </div>
     </div>
