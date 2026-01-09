@@ -37,11 +37,10 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isTVMode] = useState(isTV);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [focusedChannelIndex, setFocusedChannelIndex] = useState(0);
-  const videoContainerRef = useRef<HTMLDivElement>(null);
   const videoRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<ReturnType<typeof videojs> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const channelButtonsRef = useRef<(HTMLButtonElement | null)[]>([]);
   const carouselPointerStartRef = useRef<{ x: number; y: number } | null>(null);
@@ -77,26 +76,12 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
       preload: 'auto',
       playsinline: true,
       liveui: true,
-      controlBar: {
-        children: [
-          'playToggle',
-          'volumePanel',
-          'currentTimeDisplay',
-          'timeDivider',
-          'durationDisplay',
-          'progressControl',
-          'liveDisplay',
-          'fullscreenToggle',
-          'qualityLevels'
-        ]
-      },
       html5: {
         vhs: {
           overrideNative: true,
           enableLowInitialPlaylist: true,
           smoothQualityChange: true,
           fastQualityChange: true,
-          llhls: true,
         },
         nativeVideoTracks: false,
         nativeAudioTracks: false,
@@ -105,10 +90,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
       sources: [{
         src: streamUrl,
         type: isHLS ? 'application/x-mpegURL' : 'video/mp4'
-      }],
-      // Retry configuration
-      retryInterval: 5000,
-      maxRetriesBeforePlaybackFailure: 5,
+      }]
     };
 
     // Initialize player
@@ -211,18 +193,18 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   }, [focusedChannelIndex]);
 
   return (
-    <div ref={videoContainerRef} className="fixed inset-0 z-50 bg-black animate-fade-in flex flex-col">
+    <div ref={containerRef} className="fixed inset-0 z-50 bg-background animate-fade-in flex flex-col">
       {/* Header with Channel Info */}
-      <div className="flex items-center justify-between p-3 bg-black/80 border-b border-white/10 backdrop-blur-md">
+      <div className="flex items-center justify-between p-3 bg-card border-b border-border">
         <div className="flex items-center gap-3">
           <img
             src={channel.logo}
             alt={channel.name}
             className="w-10 h-10 rounded-lg object-cover"
           />
-          <div className="hidden sm:block">
-            <h2 className="font-display font-semibold text-white">{channel.name}</h2>
-            <div className="flex items-center gap-2 text-xs text-white/70">
+          <div>
+            <h2 className="font-display font-semibold text-foreground">{channel.name}</h2>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
               {channel.isLive && (
                 <span className="live-badge text-xs">
                   <Radio className="w-2 h-2" />
@@ -241,7 +223,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
           variant="ghost" 
           size="icon" 
           onClick={onClose}
-          className="text-white hover:bg-white/10 focus:ring-2 focus:ring-white/30"
+          className="text-foreground hover:bg-accent focus:ring-2 focus:ring-primary/50"
           tabIndex={0}
           aria-label="বন্ধ করুন"
         >
@@ -250,55 +232,37 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
       </div>
 
       {/* Video Player Section */}
-      <div className="flex-1 relative bg-black overflow-hidden">
-        <div 
-          ref={videoRef} 
-          className="w-full h-full"
-          style={{
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-          }}
-        />
+      <div className="flex-1 relative bg-black">
+        <div ref={videoRef} className="w-full h-full video-js-container" />
 
         {/* Loading State */}
         {isLoading && !error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/60 pointer-events-none backdrop-blur-sm">
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50 pointer-events-none">
             <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-blue-500/20 flex items-center justify-center mx-auto mb-4 animate-pulse">
-                <Radio className="w-8 h-8 text-blue-400" />
+              <div className="w-16 h-16 rounded-full bg-primary/20 flex items-center justify-center mx-auto mb-4 animate-pulse">
+                <Radio className="w-8 h-8 text-primary" />
               </div>
-              <p className="text-white/80 font-medium">স্ট্রিম লোড হচ্ছে...</p>
+              <p className="text-white/70">স্ট্রিম লোড হচ্ছে...</p>
             </div>
           </div>
         )}
 
         {/* Error State */}
         {error && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/70 backdrop-blur-sm z-50">
-            <div className="text-center space-y-4 px-6">
-              <div className="w-16 h-16 rounded-full bg-red-500/20 flex items-center justify-center mx-auto">
-                <AlertCircle className="w-8 h-8 text-red-400" />
+          <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+            <div className="text-center">
+              <div className="w-16 h-16 rounded-full bg-destructive/20 flex items-center justify-center mx-auto mb-4">
+                <AlertCircle className="w-8 h-8 text-destructive" />
               </div>
-              <div>
-                <p className="text-red-400 font-medium">{error}</p>
-                <p className="text-xs text-white/50 mt-2 break-all">URL: {channel.streamUrl}</p>
-              </div>
-              <Button 
-                onClick={onClose}
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                বন্ধ করুন
-              </Button>
+              <p className="text-destructive">{error}</p>
+              <p className="text-xs text-white/50 mt-2">URL: {channel.streamUrl}</p>
             </div>
           </div>
         )}
       </div>
 
       {/* Channel Carousel - Separate Section Below Player */}
-      <div className="bg-black/80 border-t border-white/10 backdrop-blur-md p-4 max-h-32 overflow-y-auto">
+      <div className="bg-card border-t border-border p-4">
         <Carousel
           opts={{
             align: "start",
@@ -313,7 +277,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
                 <button
                   ref={(el) => { channelButtonsRef.current[index] = el; }}
                   type="button"
-                  className="flex flex-col items-center gap-2 cursor-pointer group outline-none focus:scale-110 transition-all duration-200"
+                  className="flex flex-col items-center gap-1 cursor-pointer group outline-none focus:scale-110 transition-transform duration-200"
                   tabIndex={0}
                   onFocus={() => setFocusedChannelIndex(index)}
                   onPointerDown={(e) => {
@@ -347,21 +311,21 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
                     <img
                       src={ch.logo}
                       alt={ch.name}
-                      className="w-14 h-14 md:w-16 md:h-16 rounded-lg object-cover border-2 border-transparent group-hover:border-blue-400 group-focus:border-blue-400 transition-colors duration-200 shadow-lg"
+                      className="w-14 h-14 md:w-16 md:h-16 rounded-lg object-cover border-2 border-transparent group-hover:border-primary group-focus:border-primary transition-colors"
                     />
                     {ch.isLive && (
-                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse shadow-lg shadow-red-500/50" />
+                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-red-500 rounded-full animate-pulse" />
                     )}
                   </div>
-                  <span className="text-xs text-white/60 group-hover:text-white group-focus:text-white transition-colors text-center max-w-16 truncate font-medium">
+                  <span className="text-xs text-muted-foreground group-hover:text-foreground group-focus:text-foreground transition-colors text-center max-w-16 truncate">
                     {ch.name}
                   </span>
                 </button>
               </CarouselItem>
             ))}
           </CarouselContent>
-          <CarouselPrevious className="hidden md:flex -left-2 bg-white/10 hover:bg-white/20 border-white/20" />
-          <CarouselNext className="hidden md:flex -right-2 bg-white/10 hover:bg-white/20 border-white/20" />
+          <CarouselPrevious className="hidden md:flex -left-2" />
+          <CarouselNext className="hidden md:flex -right-2" />
         </Carousel>
       </div>
     </div>
