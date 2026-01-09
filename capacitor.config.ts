@@ -10,7 +10,12 @@ const config: CapacitorConfig = {
   },
   android: {
     // Android TV specific settings
-    allowMixedContent: true
+    allowMixedContent: true,
+    // Disable LOCAL_NETWORK permission popup
+    useLegacyBridge: false,
+    buildOptions: {
+      releaseType: 'release'
+    }
   }
 };
 
