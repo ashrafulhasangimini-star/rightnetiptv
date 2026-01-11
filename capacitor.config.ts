@@ -9,21 +9,13 @@ const config: CapacitorConfig = {
     cleartext: true
   },
   android: {
-    // Android TV specific settings
     allowMixedContent: true,
-    // Disable LOCAL_NETWORK permission popup
-    useLegacyBridge: false,
     buildOptions: {
       releaseType: 'release'
     }
   },
   ios: {
-    // iOS specific settings for HTTP video playback
-    preferredConfig: {
-      scheme: 'capacitor://',
-      iosScheme: 'capacitor',
-      hostname: 'localhost'
-    }
+    limitsNavigationsToAppBoundDomains: false
   }
 };
 

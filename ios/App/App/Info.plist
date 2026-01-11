@@ -53,13 +53,6 @@
 		<true/>
 		<key>NSAllowsArbitraryLoadsForMedia</key>
 		<true/>
-		<key>NSLocalNetworkUsageDescription</key>
-		<string>আমরা আপনার স্থানীয় নেটওয়ার্কে ভিডিও স্ট্রিম করার জন্য সংযোগ করি</string>
-		<key>NSBonjourServiceTypes</key>
-		<array>
-			<string>_http._tcp</string>
-			<string>_stream._tcp</string>
-		</array>
 	</dict>
 </dict>
 </plist>
