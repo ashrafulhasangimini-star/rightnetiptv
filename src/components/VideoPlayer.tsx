@@ -12,6 +12,7 @@ import {
   CarouselPrevious,
 } from "./ui/carousel";
 import { incrementViewerCount, decrementViewerCount } from "@/lib/viewerUtils";
+import { supabase } from "@/integrations/supabase/client";
 
 interface VideoPlayerProps {
   channel: Channel;
@@ -39,6 +40,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   const [error, setError] = useState<string | null>(null);
   const [isTVMode] = useState(isTV);
   const [focusedChannelIndex, setFocusedChannelIndex] = useState(0);
+  const [liveViewerCount, setLiveViewerCount] = useState(channel.viewers);
   const videoRef = useRef<HTMLDivElement>(null);
   const playerRef = useRef<ReturnType<typeof videojs> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -164,8 +166,9 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
     const trackViewer = async () => {
       try {
         if (!viewerCountTrackedRef.current && channel.id) {
-          await incrementViewerCount(channel.id);
+          const newCount = await incrementViewerCount(channel.id);
           viewerCountTrackedRef.current = true;
+          setLiveViewerCount(newCount);
           console.log(`Viewer count incremented for channel: ${channel.name}`);
         }
       } catch (error) {
@@ -191,6 +194,36 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
       untrackViewer();
     };
   }, [channel.id, channel.name]);
+
+  // Real-time subscription for viewer count updates
+  useEffect(() => {
+    if (!channel.id) return;
+
+    // Reset live count when channel changes
+    setLiveViewerCount(channel.viewers);
+
+    const channelSubscription = supabase
+      .channel(`viewer-count-${channel.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'channels',
+          filter: `id=eq.${channel.id}`
+        },
+        (payload) => {
+          if (payload.new && typeof payload.new.viewer_count === 'number') {
+            setLiveViewerCount(payload.new.viewer_count);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channelSubscription);
+    };
+  }, [channel.id, channel.viewers]);
 
   // Keyboard/D-pad navigation for TV
   const otherChannels = channels.filter((ch) => ch.id !== channel.id);
@@ -252,7 +285,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
               )}
               <span className="flex items-center gap-1">
                 <Users className="w-3 h-3" />
-                {channel.viewers.toLocaleString()}
+                {liveViewerCount.toLocaleString()}
               </span>
             </div>
           </div>
