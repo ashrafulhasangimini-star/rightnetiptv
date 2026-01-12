@@ -21,24 +21,9 @@ interface VideoPlayerProps {
   onChannelChange: (channel: Channel) => void;
 }
 
-// Detect if running on Android TV or large screen TV
-const isTV = () => {
-  if (typeof window === 'undefined') return false;
-  const ua = navigator.userAgent.toLowerCase();
-  return ua.includes('android tv') || 
-         ua.includes('googletv') || 
-         ua.includes('smart-tv') ||
-         ua.includes('smarttv') ||
-         ua.includes('hbbtv') ||
-         ua.includes('tizen') ||
-         ua.includes('webos') ||
-         (window.innerWidth >= 1920 && !('ontouchstart' in window));
-};
-
 const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlayerProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [isTVMode] = useState(isTV);
   const [focusedChannelIndex, setFocusedChannelIndex] = useState(0);
   const [liveViewerCount, setLiveViewerCount] = useState(channel.viewers);
   const videoRef = useRef<HTMLDivElement>(null);
