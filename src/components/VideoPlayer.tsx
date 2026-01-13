@@ -50,6 +50,9 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
     // Create video element
     const videoElement = document.createElement("video-js");
     videoElement.classList.add("vjs-big-play-centered");
+    // Disable AirPlay/Remote Playback to prevent "local network" permission prompt
+    videoElement.setAttribute('disableRemotePlayback', '');
+    videoElement.setAttribute('x-webkit-airplay', 'deny');
     videoRef.current.innerHTML = '';
     videoRef.current.appendChild(videoElement);
 
@@ -67,6 +70,8 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
       preload: 'auto',
       playsinline: true,
       liveui: true,
+      // Disable remote playback features (AirPlay, Chromecast) to prevent local network permission
+      enableRemotePlayback: false,
       html5: {
         vhs: {
           // Use native HLS on Safari/iOS for best compatibility
