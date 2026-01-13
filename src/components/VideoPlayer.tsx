@@ -96,6 +96,26 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
     // Initialize player
     const player = videojs(videoElement, options, function onPlayerReady() {
       console.log('Video.js player is ready');
+
+      // Ensure Remote Playback / Cast discovery is disabled (prevents Chrome "Local network" prompt)
+      try {
+        const techEl = player.tech(true)?.el() as HTMLVideoElement | undefined;
+        if (techEl) {
+          // Property + attribute for broad browser support
+          (techEl as any).disableRemotePlayback = true;
+          techEl.setAttribute('disableRemotePlayback', '');
+          techEl.setAttribute('x-webkit-airplay', 'deny');
+        }
+
+        const innerVideo = player.el()?.querySelector('video') as HTMLVideoElement | null;
+        if (innerVideo) {
+          (innerVideo as any).disableRemotePlayback = true;
+          innerVideo.setAttribute('disableRemotePlayback', '');
+          innerVideo.setAttribute('x-webkit-airplay', 'deny');
+        }
+      } catch (e) {
+        console.warn('Remote playback disable failed:', e);
+      }
       
       player.on('loadeddata', () => {
         setIsLoading(false);
