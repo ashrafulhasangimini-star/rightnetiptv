@@ -6,9 +6,7 @@ import VideoPlayer from "@/components/VideoPlayer";
 import { useChannels } from "@/hooks/useChannels";
 import { useCategories } from "@/hooks/useCategories";
 import { Channel } from "@/types/channel";
-import { Tv, Users, Radio, Layers, Loader2, Search, X } from "lucide-react";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Tv, Users, Radio, Layers, Loader2 } from "lucide-react";
 
 const Index = () => {
   const { data: dbChannels, isLoading: channelsLoading } = useChannels();
@@ -69,7 +67,7 @@ const Index = () => {
   if (isLoading) {
     return (
       <div className="min-h-screen bg-background">
-        <Header />
+        <Header searchQuery={searchQuery} onSearchChange={setSearchQuery} />
         <div className="flex items-center justify-center h-[60vh]">
           <div className="text-center space-y-4">
             <Loader2 className="w-12 h-12 animate-spin text-primary mx-auto" />
@@ -82,7 +80,7 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <Header />
+      <Header searchQuery={searchQuery} onSearchChange={setSearchQuery} />
       
       {/* Hero Section */}
       <section className="relative py-12 lg:py-20 overflow-hidden">
@@ -117,28 +115,6 @@ const Index = () => {
       {/* Channels Section */}
       <section className="container px-4 pb-12">
         <div className="mb-8 space-y-4">
-          {/* Search Box */}
-          <div className="relative max-w-md">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
-            <Input
-              type="text"
-              placeholder="চ্যানেল খুঁজুন..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-10 pr-10 bg-card border-border"
-            />
-            {searchQuery && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
-                onClick={() => setSearchQuery("")}
-              >
-                <X className="w-4 h-4" />
-              </Button>
-            )}
-          </div>
-
           <h2 className="font-display font-bold text-2xl">চ্যানেল সমূহ</h2>
           <CategoryFilter
             categories={categories}
