@@ -53,6 +53,8 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
     // Disable AirPlay/Remote Playback to prevent "local network" permission prompt
     videoElement.setAttribute('disableRemotePlayback', '');
     videoElement.setAttribute('x-webkit-airplay', 'deny');
+    videoElement.setAttribute('playsinline', 'true');
+    videoElement.setAttribute('webkit-playsinline', 'true');
     videoRef.current.innerHTML = '';
     videoRef.current.appendChild(videoElement);
 
@@ -60,32 +62,37 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
     const isHLS = streamUrl.includes('.m3u8');
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    const isAppleDevice = isIOS || isSafari;
 
-    // Video.js options - optimized for Safari/iOS
+    // For iOS/Safari with HLS, use native playback directly
+    // Video.js options - heavily optimized for Safari/iOS
     const options: any = {
-      autoplay: true,
+      autoplay: 'muted', // iOS requires muted autoplay
       controls: true,
       responsive: true,
       fluid: true,
       preload: 'auto',
       playsinline: true,
       liveui: true,
+      muted: isAppleDevice, // Start muted on Apple devices for autoplay
       // Disable remote playback features (AirPlay, Chromecast) to prevent local network permission
       enableRemotePlayback: false,
       html5: {
         vhs: {
-          // Use native HLS on Safari/iOS for best compatibility
-          overrideNative: !(isIOS || isSafari),
+          // CRITICAL: Always use native HLS on Safari/iOS - do NOT use VHS polyfill
+          overrideNative: !isAppleDevice,
           enableLowInitialPlaylist: true,
           smoothQualityChange: true,
           fastQualityChange: true,
-          maxPlaylistRetries: 5,
-          timeout: 45000,
+          maxPlaylistRetries: 10,
+          timeout: 60000,
           limitRenditionByPlayerDimensions: false,
+          handleManifestRedirects: true,
+          allowSeeksWithinUnsafeLiveWindow: true,
         },
-        nativeVideoTracks: isIOS || isSafari,
-        nativeAudioTracks: isIOS || isSafari,
-        nativeTextTracks: isIOS || isSafari,
+        nativeVideoTracks: isAppleDevice,
+        nativeAudioTracks: isAppleDevice,
+        nativeTextTracks: isAppleDevice,
       },
       sources: [{
         src: streamUrl,
@@ -95,7 +102,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
 
     // Initialize player
     const player = videojs(videoElement, options, function onPlayerReady() {
-      console.log('Video.js player is ready');
+      console.log('Video.js player is ready for:', isAppleDevice ? 'Apple Device' : 'Other Device');
 
       // Ensure Remote Playback / Cast discovery is disabled (prevents Chrome "Local network" prompt)
       try {
@@ -105,6 +112,8 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
           (techEl as any).disableRemotePlayback = true;
           techEl.setAttribute('disableRemotePlayback', '');
           techEl.setAttribute('x-webkit-airplay', 'deny');
+          techEl.setAttribute('playsinline', 'true');
+          techEl.setAttribute('webkit-playsinline', 'true');
         }
 
         const innerVideo = player.el()?.querySelector('video') as HTMLVideoElement | null;
@@ -112,6 +121,21 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
           (innerVideo as any).disableRemotePlayback = true;
           innerVideo.setAttribute('disableRemotePlayback', '');
           innerVideo.setAttribute('x-webkit-airplay', 'deny');
+          innerVideo.setAttribute('playsinline', 'true');
+          innerVideo.setAttribute('webkit-playsinline', 'true');
+          
+          // For iOS/Safari, attempt to unmute after user interaction
+          if (isAppleDevice) {
+            innerVideo.muted = true;
+            const unmuteHandler = () => {
+              innerVideo.muted = false;
+              player.muted(false);
+              document.removeEventListener('touchstart', unmuteHandler);
+              document.removeEventListener('click', unmuteHandler);
+            };
+            document.addEventListener('touchstart', unmuteHandler, { once: true });
+            document.addEventListener('click', unmuteHandler, { once: true });
+          }
         }
       } catch (e) {
         console.warn('Remote playback disable failed:', e);
