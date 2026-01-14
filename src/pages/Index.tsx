@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import Header from "@/components/Header";
 import ChannelCard from "@/components/ChannelCard";
 import CategoryFilter from "@/components/CategoryFilter";
@@ -6,7 +6,9 @@ import VideoPlayer from "@/components/VideoPlayer";
 import { useChannels } from "@/hooks/useChannels";
 import { useCategories } from "@/hooks/useCategories";
 import { Channel } from "@/types/channel";
-import { Tv, Users, Radio, Layers, Loader2 } from "lucide-react";
+import { Tv, Users, Radio, Layers, Loader2, Search, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 
 const Index = () => {
   const { data: dbChannels, isLoading: channelsLoading } = useChannels();
@@ -14,7 +16,7 @@ const Index = () => {
   
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedChannel, setSelectedChannel] = useState<Channel | null>(null);
-
+  const [searchQuery, setSearchQuery] = useState("");
   const isLoading = channelsLoading || categoriesLoading;
 
   // Transform DB channels to the Channel type used by UI components
@@ -39,12 +41,24 @@ const Index = () => {
     channelCount: channels.filter(ch => ch.category === cat.name).length,
   })) || [];
 
-  const filteredChannels = selectedCategory
+  // Filter by category first
+  const categoryFiltered = selectedCategory
     ? channels.filter((ch) => 
         categories.find(c => c.id === selectedCategory)?.name === ch.category
       )
     : channels;
 
+  // Then filter by search query
+  const filteredChannels = useMemo(() => {
+    if (!searchQuery.trim()) return categoryFiltered;
+    
+    const query = searchQuery.toLowerCase().trim();
+    return categoryFiltered.filter((ch) => 
+      ch.name.toLowerCase().includes(query) ||
+      ch.category.toLowerCase().includes(query) ||
+      ch.description?.toLowerCase().includes(query)
+    );
+  }, [categoryFiltered, searchQuery]);
   const stats = [
     { icon: Tv, label: "মোট চ্যানেল", value: channels.length },
     { icon: Radio, label: "লাইভ চ্যানেল", value: channels.filter(ch => ch.isLive).length },
@@ -102,8 +116,30 @@ const Index = () => {
 
       {/* Channels Section */}
       <section className="container px-4 pb-12">
-        <div className="mb-8">
-          <h2 className="font-display font-bold text-2xl mb-6">চ্যানেল সমূহ</h2>
+        <div className="mb-8 space-y-4">
+          {/* Search Box */}
+          <div className="relative max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="চ্যানেল খুঁজুন..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10 pr-10 bg-card border-border"
+            />
+            {searchQuery && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8"
+                onClick={() => setSearchQuery("")}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            )}
+          </div>
+
+          <h2 className="font-display font-bold text-2xl">চ্যানেল সমূহ</h2>
           <CategoryFilter
             categories={categories}
             selectedCategory={selectedCategory}
