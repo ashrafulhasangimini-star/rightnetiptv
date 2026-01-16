@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Download, Smartphone, Monitor, Tv, Apple, Chrome, CheckCircle } from "lucide-react";
+import { Download, Smartphone, Monitor, Tv, Apple, Chrome, CheckCircle, Globe } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -14,6 +14,7 @@ const Install = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
+  const [isOpera, setIsOpera] = useState(false);
 
   useEffect(() => {
     // Check if already installed
@@ -24,6 +25,10 @@ const Install = () => {
     // Check if iOS
     const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent);
     setIsIOS(isIOSDevice);
+
+    // Check if Opera browser
+    const isOperaBrowser = /OPR\/|Opera/.test(navigator.userAgent);
+    setIsOpera(isOperaBrowser);
 
     // Listen for install prompt
     const handleBeforeInstallPrompt = (e: Event) => {
@@ -222,6 +227,37 @@ const Install = () => {
                 <li>৩. পপআপে "Install" ক্লিক করুন</li>
                 <li>৪. অ্যাপ আইকন স্বয়ংক্রিয়ভাবে তৈরি হবে</li>
               </ol>
+            </CardContent>
+          </Card>
+
+          {/* Opera Browser */}
+          <Card className={isOpera ? "border-red-500/50 ring-2 ring-red-500/20" : ""}>
+            <CardHeader>
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 bg-red-500/20 rounded-xl flex items-center justify-center">
+                  <Globe className="w-6 h-6 text-red-500" />
+                </div>
+                <div>
+                  <CardTitle className="text-lg">Opera ব্রাউজার</CardTitle>
+                  <CardDescription>Desktop / Mobile</CardDescription>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <ol className="space-y-2 text-sm text-muted-foreground">
+                <li>১. Opera সেটিংস → Features খুলুন</li>
+                <li>২. "Install apps" অপশন Enable করুন</li>
+                <li>৩. এই পেজে ফিরে আসুন</li>
+                <li>৪. অ্যাড্রেস বারে ইনস্টল (⊕) আইকনে ক্লিক করুন</li>
+                <li>৫. অথবা মেনু (☰) → "Install" সিলেক্ট করুন</li>
+              </ol>
+              {isOpera && (
+                <div className="mt-4 p-3 bg-red-500/10 rounded-lg">
+                  <p className="text-xs text-red-400">
+                    💡 আপনি Opera ব্রাউজারে আছেন - উপরের নির্দেশনা অনুসরণ করুন
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>
