@@ -64,19 +64,16 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
       hlsRef.current = null;
     }
     // FIX 4: iOS-এ নতুন source দেওয়ার আগে video element সম্পূর্ণ reset
+    // ⚠️ video.load() with no src fires an error event — তাই listeners এর আগেই করতে হবে
     video.pause();
     video.removeAttribute("src");
     video.load();
 
+    // Handlers — defined here so cleanup can reference them
     const onLoaded = () => setIsLoading(false);
     const onPlaying = () => setIsLoading(false);
     const onWaiting = () => setIsLoading(true);
     const onErr = () => setError("স্ট্রিম প্লে করা যাচ্ছে না");
-
-    video.addEventListener("loadeddata", onLoaded);
-    video.addEventListener("playing", onPlaying);
-    video.addEventListener("waiting", onWaiting);
-    video.addEventListener("error", onErr);
 
     const tryPlay = () => {
       const p = video.play();
@@ -90,8 +87,16 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
       }
     };
 
+    // FIX BUG: Event listeners টা setTimeout-এর ভেতরে দেওয়া হচ্ছে
+    // কারণ: video.load() (no src) error event fire করে — সেটা যেন onErr না ধরে
     // FIX 4: 50ms delay — iOS Safari-কে আগের media session release করার সময় দেওয়া
     const setupTimer = setTimeout(() => {
+      // এখন src set করার পরে listeners attach করা নিরাপদ
+      video.addEventListener("loadeddata", onLoaded);
+      video.addEventListener("playing", onPlaying);
+      video.addEventListener("waiting", onWaiting);
+      video.addEventListener("error", onErr);
+
       if (!isHLS) {
         video.src = streamUrl;
         tryPlay();
@@ -137,6 +142,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
 
     return () => {
       clearTimeout(setupTimer); // FIX 4: unmount হলে timer বাতিল
+      // Listeners সবসময় remove করা — attached হোক বা না হোক, safe
       video.removeEventListener("loadeddata", onLoaded);
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("waiting", onWaiting);
