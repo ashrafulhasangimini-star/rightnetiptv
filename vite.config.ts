@@ -15,7 +15,15 @@ export default defineConfig(({ mode }) => ({
     mode === "development" && componentTagger(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["favicon.ico", "apple-touch-icon.png", "mask-icon.svg"],
+      // FIX: skipWaiting + clientsClaim — নতুন SW সাথে সাথে active হবে
+      injectRegister: "auto",
+      includeAssets: [
+        "favicon.ico",
+        "apple-touch-icon.png",
+        "mask-icon.svg",
+        "pwa-192x192.png",
+        "pwa-512x512.png",
+      ],
       manifest: {
         id: "/",
         name: "Right NeT TV - লাইভ টিভি স্ট্রিমিং",
@@ -36,49 +44,62 @@ export default defineConfig(({ mode }) => ({
             src: "/pwa-192x192.png",
             sizes: "192x192",
             type: "image/png",
-            purpose: "any"
-          },
-          {
-            src: "/apple-touch-icon.png",
-            sizes: "180x180",
-            type: "image/png",
-            purpose: "any"
+            purpose: "any",
           },
           {
             src: "/pwa-512x512.png",
             sizes: "512x512",
             type: "image/png",
-            purpose: "any"
+            purpose: "any",
           },
           {
             src: "/pwa-maskable-192x192.png",
             sizes: "192x192",
             type: "image/png",
-            purpose: "maskable"
+            purpose: "maskable",
           },
           {
             src: "/pwa-maskable-512x512.png",
             sizes: "512x512",
             type: "image/png",
-            purpose: "maskable"
-          }
-        ]
+            purpose: "maskable",
+          },
+          // FIX: iOS home screen icon
+          {
+            src: "/apple-touch-icon.png",
+            sizes: "180x180",
+            type: "image/png",
+          },
+        ],
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+
+        // FIX: page refresh-এ blank screen সমস্যা ঠিক করবে (Firefox, Samsung)
         navigateFallback: "index.html",
         navigateFallbackDenylist: [/^\/_/, /\/[^/?]+\.[^/]+$/],
+
+        // FIX: নতুন service worker সাথে সাথে নিয়ন্ত্রণ নেবে
+        skipWaiting: true,
+        clientsClaim: true,
+
         runtimeCaching: [
+          // FIX: HLS .m3u8 manifest — কখনো cache করা যাবে না, সবসময় network থেকে
           {
-            // Never cache HLS manifests
             urlPattern: /^https?:\/\/.*\.m3u8(\?.*)?$/i,
-            handler: "NetworkOnly"
+            handler: "NetworkOnly",
           },
+          // FIX: HLS .ts video segments — cache করা যাবে না
           {
-            // Never cache HLS video segments
             urlPattern: /^https?:\/\/.*\.ts(\?.*)?$/i,
-            handler: "NetworkOnly"
+            handler: "NetworkOnly",
           },
+          // FIX: HLS .aac audio segments — cache করা যাবে না
+          {
+            urlPattern: /^https?:\/\/.*\.aac(\?.*)?$/i,
+            handler: "NetworkOnly",
+          },
+          // Images cache — ঠিক আছে
           {
             urlPattern: /^https:\/\/images\.unsplash\.com\/.*/i,
             handler: "CacheFirst",
@@ -86,13 +107,13 @@ export default defineConfig(({ mode }) => ({
               cacheName: "images-cache",
               expiration: {
                 maxEntries: 50,
-                maxAgeSeconds: 60 * 60 * 24 * 30 // 30 days
-              }
-            }
-          }
-        ]
-      }
-    })
+                maxAgeSeconds: 60 * 60 * 24 * 30, // 30 days
+              },
+            },
+          },
+        ],
+      },
+    }),
   ].filter(Boolean),
   resolve: {
     alias: {
