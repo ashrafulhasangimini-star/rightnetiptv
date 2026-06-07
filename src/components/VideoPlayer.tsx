@@ -1,9 +1,8 @@
 import { Channel } from "@/types/channel";
-import { X, Users, Radio, AlertCircle } from "lucide-react";
+import { X, Users, Radio, AlertCircle, RotateCw } from "lucide-react";
 import { Button } from "./ui/button";
 import { useState, useRef, useEffect, useCallback } from "react";
-import videojs from "video.js";
-import "video.js/dist/video-js.css";
+import Hls from "hls.js";
 import {
   Carousel,
   CarouselContent,
@@ -26,176 +25,107 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   const [error, setError] = useState<string | null>(null);
   const [focusedChannelIndex, setFocusedChannelIndex] = useState(0);
   const [liveViewerCount, setLiveViewerCount] = useState(channel.viewers);
-  const videoRef = useRef<HTMLDivElement>(null);
-  const playerRef = useRef<ReturnType<typeof videojs> | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const channelButtonsRef = useRef<(HTMLButtonElement | null)[]>([]);
   const carouselPointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const viewerCountTrackedRef = useRef(false);
 
-  // Initialize Video.js player
+  // Initialize HLS / native video player
   useEffect(() => {
-    if (!videoRef.current || !channel.streamUrl) return;
-
-    // Clean up previous player
-    if (playerRef.current) {
-      playerRef.current.dispose();
-      playerRef.current = null;
-    }
+    const video = videoRef.current;
+    if (!video || !channel.streamUrl) return;
 
     setIsLoading(true);
     setError(null);
 
-    // Create video element
-    const videoElement = document.createElement("video-js");
-    videoElement.classList.add("vjs-big-play-centered");
-    // Disable AirPlay/Remote Playback to prevent "local network" permission prompt
-    videoElement.setAttribute('disableRemotePlayback', '');
-    videoElement.setAttribute('x-webkit-airplay', 'deny');
-    videoElement.setAttribute('playsinline', 'true');
-    videoElement.setAttribute('webkit-playsinline', 'true');
-    videoRef.current.innerHTML = '';
-    videoRef.current.appendChild(videoElement);
-
     const streamUrl = channel.streamUrl;
-    const isHLS = streamUrl.includes('.m3u8');
-    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-    const isAppleDevice = isIOS || isSafari;
+    const isHLS = /\.m3u8(\?|$)/i.test(streamUrl);
 
-    // For iOS/Safari with HLS, use native playback directly
-    // Video.js options - heavily optimized for Safari/iOS
-    const options: any = {
-      autoplay: 'muted', // iOS requires muted autoplay
-      controls: true,
-      responsive: true,
-      fluid: true,
-      preload: 'auto',
-      playsinline: true,
-      liveui: true,
-      muted: isAppleDevice, // Start muted on Apple devices for autoplay
-      // Disable remote playback features (AirPlay, Chromecast) to prevent local network permission
-      enableRemotePlayback: false,
-      html5: {
-        vhs: {
-          // CRITICAL: Always use native HLS on Safari/iOS - do NOT use VHS polyfill
-          overrideNative: !isAppleDevice,
-          enableLowInitialPlaylist: true,
-          smoothQualityChange: true,
-          fastQualityChange: true,
-          maxPlaylistRetries: 10,
-          timeout: 60000,
-          limitRenditionByPlayerDimensions: false,
-          handleManifestRedirects: true,
-          allowSeeksWithinUnsafeLiveWindow: true,
-        },
-        nativeVideoTracks: isAppleDevice,
-        nativeAudioTracks: isAppleDevice,
-        nativeTextTracks: isAppleDevice,
-      },
-      sources: [{
-        src: streamUrl,
-        type: isHLS ? 'application/x-mpegURL' : 'video/mp4'
-      }]
+    // Cleanup any previous hls instance
+    if (hlsRef.current) {
+      hlsRef.current.destroy();
+      hlsRef.current = null;
+    }
+
+    const onLoaded = () => setIsLoading(false);
+    const onPlaying = () => setIsLoading(false);
+    const onWaiting = () => setIsLoading(true);
+    const onErr = () => setError("স্ট্রিম প্লে করা যাচ্ছে না");
+
+    video.addEventListener("loadeddata", onLoaded);
+    video.addEventListener("playing", onPlaying);
+    video.addEventListener("waiting", onWaiting);
+    video.addEventListener("error", onErr);
+
+    const tryPlay = () => {
+      const p = video.play();
+      if (p && typeof p.catch === "function") {
+        p.catch(() => {
+          // Autoplay blocked; user can press play
+        });
+      }
     };
 
-    // Initialize player
-    const player = videojs(videoElement, options, function onPlayerReady() {
-      console.log('Video.js player is ready for:', isAppleDevice ? 'Apple Device' : 'Other Device');
-
-      // Ensure Remote Playback / Cast discovery is disabled (prevents Chrome "Local network" prompt)
-      try {
-        const techEl = player.tech(true)?.el() as HTMLVideoElement | undefined;
-        if (techEl) {
-          // Property + attribute for broad browser support
-          (techEl as any).disableRemotePlayback = true;
-          techEl.setAttribute('disableRemotePlayback', '');
-          techEl.setAttribute('x-webkit-airplay', 'deny');
-          techEl.setAttribute('playsinline', 'true');
-          techEl.setAttribute('webkit-playsinline', 'true');
-        }
-
-        const innerVideo = player.el()?.querySelector('video') as HTMLVideoElement | null;
-        if (innerVideo) {
-          (innerVideo as any).disableRemotePlayback = true;
-          innerVideo.setAttribute('disableRemotePlayback', '');
-          innerVideo.setAttribute('x-webkit-airplay', 'deny');
-          innerVideo.setAttribute('playsinline', 'true');
-          innerVideo.setAttribute('webkit-playsinline', 'true');
-          
-          // For iOS/Safari, attempt to unmute after user interaction
-          if (isAppleDevice) {
-            innerVideo.muted = true;
-            const unmuteHandler = () => {
-              innerVideo.muted = false;
-              player.muted(false);
-              document.removeEventListener('touchstart', unmuteHandler);
-              document.removeEventListener('click', unmuteHandler);
-            };
-            document.addEventListener('touchstart', unmuteHandler, { once: true });
-            document.addEventListener('click', unmuteHandler, { once: true });
-          }
-        }
-      } catch (e) {
-        console.warn('Remote playback disable failed:', e);
-      }
-      
-      player.on('loadeddata', () => {
-        setIsLoading(false);
+    if (!isHLS) {
+      video.src = streamUrl;
+      tryPlay();
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      // iOS Safari / macOS Safari — native HLS
+      video.src = streamUrl;
+      tryPlay();
+    } else if (Hls.isSupported()) {
+      const hls = new Hls({
+        enableWorker: true,
+        lowLatencyMode: true,
       });
-
-      player.on('playing', () => {
-        setIsLoading(false);
+      hlsRef.current = hls;
+      hls.loadSource(streamUrl);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        tryPlay();
       });
-
-      player.on('waiting', () => {
-        setIsLoading(true);
-      });
-
-      player.on('canplay', () => {
-        setIsLoading(false);
-      });
-
-      player.on('error', () => {
-        const err = player.error();
-        console.error('Video.js error:', err);
-        
-        if (err) {
-          switch (err.code) {
-            case 1:
-              setError("মিডিয়া লোড বাতিল হয়েছে");
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        console.error("HLS error:", data);
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              hls.startLoad();
               break;
-            case 2:
-              setError("নেটওয়ার্ক সমস্যা - স্ট্রিম লোড হচ্ছে না");
-              break;
-            case 3:
-              setError("মিডিয়া ডিকোড এরর");
-              break;
-            case 4:
-              setError("এই স্ট্রিম ফরম্যাট সাপোর্টেড নয়");
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              hls.recoverMediaError();
               break;
             default:
+              hls.destroy();
+              hlsRef.current = null;
               setError("স্ট্রিম প্লে করা যাচ্ছে না");
+              setIsLoading(false);
           }
         }
-        setIsLoading(false);
       });
-
-      player.on('stalled', () => {
-        console.log('Stream stalled');
-      });
-    });
-
-    playerRef.current = player;
+    } else {
+      setError("আপনার ব্রাউজার এই ভিডিও সাপোর্ট করে না");
+      setIsLoading(false);
+    }
 
     return () => {
-      if (playerRef.current) {
-        playerRef.current.dispose();
-        playerRef.current = null;
+      video.removeEventListener("loadeddata", onLoaded);
+      video.removeEventListener("playing", onPlaying);
+      video.removeEventListener("waiting", onWaiting);
+      video.removeEventListener("error", onErr);
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
       }
+      try {
+        video.removeAttribute("src");
+        video.load();
+      } catch {}
     };
-  }, [channel.streamUrl]);
+  }, [channel.streamUrl, retryKey]);
 
   // Track viewer count - increment when player opens, decrement when closes
   useEffect(() => {
@@ -341,7 +271,18 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
 
       {/* Video Player Section */}
       <div className="flex-1 relative bg-black">
-        <div ref={videoRef} className="w-full h-full video-js-container" />
+        <video
+          ref={videoRef}
+          className="w-full h-full"
+          controls
+          playsInline
+          // @ts-ignore - vendor attribute
+          webkit-playsinline="true"
+          x-webkit-airplay="deny"
+          disableRemotePlayback
+          autoPlay
+          muted
+        />
 
         {/* Loading State */}
         {isLoading && !error && (
@@ -364,6 +305,19 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
               </div>
               <p className="text-destructive">{error}</p>
               <p className="text-xs text-white/50 mt-2">URL: {channel.streamUrl}</p>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="mt-4"
+                onClick={() => {
+                  setError(null);
+                  setIsLoading(true);
+                  setRetryKey((k) => k + 1);
+                }}
+              >
+                <RotateCw className="w-4 h-4 mr-2" />
+                আবার চেষ্টা করুন
+              </Button>
             </div>
           </div>
         )}
