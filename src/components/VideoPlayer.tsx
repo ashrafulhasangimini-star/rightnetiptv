@@ -307,8 +307,9 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
               <div className="w-16 h-16 rounded-full bg-destructive/20 flex items-center justify-center mx-auto mb-4">
                 <AlertCircle className="w-8 h-8 text-destructive" />
               </div>
-              <p className="text-destructive">{error}</p>
-              <p className="text-xs text-white/50 mt-2">URL: {channel.streamUrl}</p>
+              <p className="text-destructive font-semibold">ভিডিও লোড হচ্ছে না। পুনরায় চেষ্টা করুন।</p>
+              <p className="text-sm text-white/70 mt-1">{channel.name}</p>
+              <p className="text-xs text-white/40 mt-1">{error}</p>
               <Button
                 variant="secondary"
                 size="sm"
@@ -324,6 +325,34 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
               </Button>
             </div>
           </div>
+        )}
+
+        {/* Tap-to-play overlay (iOS Safari autoplay blocked) */}
+        {waitingForInteraction && !error && (
+          <button
+            type="button"
+            onClick={() => {
+              const v = videoRef.current;
+              if (!v) return;
+              v.muted = false;
+              const p = v.play();
+              if (p && typeof p.then === "function") {
+                p.then(() => setWaitingForInteraction(false)).catch(() => {
+                  v.muted = true;
+                  v.play().finally(() => setWaitingForInteraction(false));
+                });
+              } else {
+                setWaitingForInteraction(false);
+              }
+            }}
+            className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/70 text-white"
+            aria-label="চ্যানেল দেখতে এখানে ট্যাপ করুন"
+          >
+            <div className="w-24 h-24 rounded-full bg-primary/90 flex items-center justify-center mb-4 shadow-2xl animate-pulse">
+              <Play className="w-12 h-12 fill-current" />
+            </div>
+            <p className="text-lg font-display font-semibold">চ্যানেল দেখতে এখানে ট্যাপ করুন</p>
+          </button>
         )}
       </div>
 
