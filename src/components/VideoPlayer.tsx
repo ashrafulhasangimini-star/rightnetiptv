@@ -1,5 +1,5 @@
 import { Channel } from "@/types/channel";
-import { X, Users, Radio, AlertCircle, RotateCw, Play } from "lucide-react";
+import { X, Users, Radio, AlertCircle, RotateCw, Play, VolumeX } from "lucide-react";
 import { Button } from "./ui/button";
 import { useState, useRef, useEffect, useCallback } from "react";
 import Hls from "hls.js";
@@ -27,6 +27,8 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   const [liveViewerCount, setLiveViewerCount] = useState(channel.viewers);
   const [retryKey, setRetryKey] = useState(0);
   const [waitingForInteraction, setWaitingForInteraction] = useState(false);
+  // FIX 1: isMuted state — video শুরু হয় muted, user tap করলে unmute হয়
+  const [isMuted, setIsMuted] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -35,22 +37,36 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   const carouselPointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const viewerCountTrackedRef = useRef(false);
 
+  // FIX 1: isMuted state সরাসরি video element-এ sync করা
+  useEffect(() => {
+    if (videoRef.current) {
+      videoRef.current.muted = isMuted;
+    }
+  }, [isMuted]);
+
   // Initialize HLS / native video player
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !channel.streamUrl) return;
 
+    // FIX 3 & 4: প্রতিবার নতুন channel-এ state পরিষ্কার করা
+    setWaitingForInteraction(false);
     setIsLoading(true);
     setError(null);
+    setIsMuted(true);
 
     const streamUrl = channel.streamUrl;
     const isHLS = /\.m3u8(\?|$)/i.test(streamUrl);
 
-    // Cleanup any previous hls instance
+    // FIX 4: আগের HLS instance destroy করা
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
+    // FIX 4: iOS-এ নতুন source দেওয়ার আগে video element সম্পূর্ণ reset
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
 
     const onLoaded = () => setIsLoading(false);
     const onPlaying = () => setIsLoading(false);
@@ -66,7 +82,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
       const p = video.play();
       if (p && typeof p.catch === "function") {
         p.catch((err: any) => {
-          // Autoplay blocked on iOS Safari etc — show tap-to-play overlay
+          // iOS Safari / Firefox autoplay block হলে tap-to-play overlay দেখানো
           if (err && (err.name === "NotAllowedError" || err.name === "AbortError")) {
             setWaitingForInteraction(true);
           }
@@ -74,48 +90,53 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
       }
     };
 
-    if (!isHLS) {
-      video.src = streamUrl;
-      tryPlay();
-    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      // iOS Safari / macOS Safari — native HLS
-      video.src = streamUrl;
-      tryPlay();
-    } else if (Hls.isSupported()) {
-      const hls = new Hls({
-        enableWorker: true,
-        lowLatencyMode: true,
-      });
-      hlsRef.current = hls;
-      hls.loadSource(streamUrl);
-      hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+    // FIX 4: 50ms delay — iOS Safari-কে আগের media session release করার সময় দেওয়া
+    const setupTimer = setTimeout(() => {
+      if (!isHLS) {
+        video.src = streamUrl;
         tryPlay();
-      });
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        console.error("HLS error:", data);
-        if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              hls.startLoad();
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              hls.recoverMediaError();
-              break;
-            default:
-              hls.destroy();
-              hlsRef.current = null;
-              setError("স্ট্রিম প্লে করা যাচ্ছে না");
-              setIsLoading(false);
+      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        // iOS Safari / macOS Safari — native HLS, hls.js ব্যবহার করা যাবে না
+        video.src = streamUrl;
+        tryPlay();
+      } else if (Hls.isSupported()) {
+        // Chrome, Firefox, Edge, Android
+        const hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+        });
+        hlsRef.current = hls;
+        hls.loadSource(streamUrl);
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MANIFEST_PARSED, () => {
+          tryPlay();
+        });
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          console.error("HLS error:", data);
+          if (data.fatal) {
+            switch (data.type) {
+              case Hls.ErrorTypes.NETWORK_ERROR:
+                hls.startLoad();
+                break;
+              case Hls.ErrorTypes.MEDIA_ERROR:
+                hls.recoverMediaError();
+                break;
+              default:
+                hls.destroy();
+                hlsRef.current = null;
+                setError("স্ট্রিম প্লে করা যাচ্ছে না");
+                setIsLoading(false);
+            }
           }
-        }
-      });
-    } else {
-      setError("আপনার ব্রাউজার এই ভিডিও সাপোর্ট করে না");
-      setIsLoading(false);
-    }
+        });
+      } else {
+        setError("আপনার ব্রাউজার এই ভিডিও সাপোর্ট করে না");
+        setIsLoading(false);
+      }
+    }, 50);
 
     return () => {
+      clearTimeout(setupTimer); // FIX 4: unmount হলে timer বাতিল
       video.removeEventListener("loadeddata", onLoaded);
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("waiting", onWaiting);
@@ -131,7 +152,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
     };
   }, [channel.streamUrl, retryKey]);
 
-  // Track viewer count - increment when player opens, decrement when closes
+  // Track viewer count — increment when player opens, decrement when closes
   useEffect(() => {
     const trackViewer = async () => {
       try {
@@ -149,7 +170,6 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
     trackViewer();
 
     return () => {
-      // Decrement viewer count when component unmounts
       const untrackViewer = async () => {
         try {
           if (viewerCountTrackedRef.current && channel.id) {
@@ -169,21 +189,20 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   useEffect(() => {
     if (!channel.id) return;
 
-    // Reset live count when channel changes
     setLiveViewerCount(channel.viewers);
 
     const channelSubscription = supabase
       .channel(`viewer-count-${channel.id}`)
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'channels',
-          filter: `id=eq.${channel.id}`
+          event: "UPDATE",
+          schema: "public",
+          table: "channels",
+          filter: `id=eq.${channel.id}`,
         },
         (payload) => {
-          if (payload.new && typeof payload.new.viewer_count === 'number') {
+          if (payload.new && typeof payload.new.viewer_count === "number") {
             setLiveViewerCount(payload.new.viewer_count);
           }
         }
@@ -195,39 +214,44 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
     };
   }, [channel.id, channel.viewers]);
 
-  // Keyboard/D-pad navigation for TV
+  // Keyboard / D-pad navigation for TV remotes
   const otherChannels = channels.filter((ch) => ch.id !== channel.id);
 
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape' || e.key === 'Backspace' || e.keyCode === 27) {
-      e.preventDefault();
-      onClose();
-      return;
-    }
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === "Escape" || e.key === "Backspace" || e.keyCode === 27) {
+        e.preventDefault();
+        onClose();
+        return;
+      }
 
-    switch (e.key) {
-      case 'ArrowLeft':
-        e.preventDefault();
-        setFocusedChannelIndex((prev) => Math.max(0, prev - 1));
-        break;
-      case 'ArrowRight':
-        e.preventDefault();
-        setFocusedChannelIndex((prev) => Math.min(otherChannels.length - 1, prev + 1));
-        break;
-      case 'ArrowUp':
-        e.preventDefault();
-        closeButtonRef.current?.focus();
-        break;
-      case 'ArrowDown':
-        e.preventDefault();
-        channelButtonsRef.current[focusedChannelIndex]?.focus();
-        break;
-    }
-  }, [onClose, otherChannels.length, focusedChannelIndex]);
+      switch (e.key) {
+        case "ArrowLeft":
+          e.preventDefault();
+          setFocusedChannelIndex((prev) => Math.max(0, prev - 1));
+          break;
+        case "ArrowRight":
+          e.preventDefault();
+          setFocusedChannelIndex((prev) =>
+            Math.min(otherChannels.length - 1, prev + 1)
+          );
+          break;
+        case "ArrowUp":
+          e.preventDefault();
+          closeButtonRef.current?.focus();
+          break;
+        case "ArrowDown":
+          e.preventDefault();
+          channelButtonsRef.current[focusedChannelIndex]?.focus();
+          break;
+      }
+    },
+    [onClose, otherChannels.length, focusedChannelIndex]
+  );
 
   useEffect(() => {
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
   useEffect(() => {
@@ -235,8 +259,16 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   }, [focusedChannelIndex]);
 
   return (
-    <div ref={containerRef} className="fixed inset-0 z-50 bg-background animate-fade-in flex flex-col">
-      {/* Header with Channel Info */}
+    // FIX 2: safe-area padding যোগ — iPhone notch ও home indicator ঠিক রাখবে
+    <div
+      ref={containerRef}
+      className="fixed inset-0 z-50 bg-background animate-fade-in flex flex-col"
+      style={{
+        paddingTop: "env(safe-area-inset-top)",
+        paddingBottom: "env(safe-area-inset-bottom)",
+      }}
+    >
+      {/* Header */}
       <div className="flex items-center justify-between p-3 bg-card border-b border-border">
         <div className="flex items-center gap-3">
           <img
@@ -245,7 +277,9 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
             className="w-10 h-10 rounded-lg object-cover"
           />
           <div>
-            <h2 className="font-display font-semibold text-foreground">{channel.name}</h2>
+            <h2 className="font-display font-semibold text-foreground">
+              {channel.name}
+            </h2>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               {channel.isLive && (
                 <span className="live-badge text-xs">
@@ -260,10 +294,10 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
             </div>
           </div>
         </div>
-        <Button 
+        <Button
           ref={closeButtonRef}
-          variant="ghost" 
-          size="icon" 
+          variant="ghost"
+          size="icon"
           onClick={onClose}
           className="text-foreground hover:bg-accent focus:ring-2 focus:ring-primary/50"
           tabIndex={0}
@@ -273,20 +307,37 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
         </Button>
       </div>
 
-      {/* Video Player Section */}
-      <div className="flex-1 relative bg-black">
+      {/* Video Section — FIX 2: min-h-0 ছাড়া iOS Safari flex-1 ভুল height ধরে */}
+      <div className="flex-1 relative bg-black min-h-0">
         <video
           ref={videoRef}
-          className="w-full h-full"
+          // FIX 2: object-contain যোগ, hardcoded muted সরানো
+          className="w-full h-full object-contain [&::-webkit-media-controls]:opacity-100"
           controls
           playsInline
-          // @ts-ignore - vendor attribute
+          // @ts-ignore — iOS vendor attribute
           webkit-playsinline="true"
           x-webkit-airplay="deny"
           disableRemotePlayback
           autoPlay
-          muted
+          // FIX 1: মূল muted attribute নেই — useEffect দিয়ে control করা হচ্ছে
         />
+
+        {/* FIX 1: Unmute overlay — video চলছে কিন্তু muted আছে তখন দেখাবে */}
+        {isMuted && !waitingForInteraction && !error && !isLoading && (
+          <button
+            type="button"
+            onClick={() => {
+              setIsMuted(false);
+              if (videoRef.current) videoRef.current.muted = false;
+            }}
+            className="absolute bottom-4 left-4 z-10 flex items-center gap-2 bg-black/60 hover:bg-black/80 active:scale-95 text-white text-sm rounded-full px-3 py-2 transition-all"
+            aria-label="শব্দ চালু করুন"
+          >
+            <VolumeX className="w-4 h-4" />
+            <span>শব্দ চালু করুন</span>
+          </button>
+        )}
 
         {/* Loading State */}
         {isLoading && !error && (
@@ -307,7 +358,9 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
               <div className="w-16 h-16 rounded-full bg-destructive/20 flex items-center justify-center mx-auto mb-4">
                 <AlertCircle className="w-8 h-8 text-destructive" />
               </div>
-              <p className="text-destructive font-semibold">ভিডিও লোড হচ্ছে না। পুনরায় চেষ্টা করুন।</p>
+              <p className="text-destructive font-semibold">
+                ভিডিও লোড হচ্ছে না। পুনরায় চেষ্টা করুন।
+              </p>
               <p className="text-sm text-white/70 mt-1">{channel.name}</p>
               <p className="text-xs text-white/40 mt-1">{error}</p>
               <Button
@@ -327,18 +380,24 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
           </div>
         )}
 
-        {/* Tap-to-play overlay (iOS Safari autoplay blocked) */}
+        {/* Tap-to-play overlay — iOS Safari autoplay block হলে */}
         {waitingForInteraction && !error && (
           <button
             type="button"
             onClick={() => {
               const v = videoRef.current;
               if (!v) return;
+              // প্রথমে unmuted play করার চেষ্টা
               v.muted = false;
+              setIsMuted(false);
               const p = v.play();
               if (p && typeof p.then === "function") {
-                p.then(() => setWaitingForInteraction(false)).catch(() => {
+                p.then(() => {
+                  setWaitingForInteraction(false);
+                }).catch(() => {
+                  // unmuted play ব্লক হলে muted play
                   v.muted = true;
+                  setIsMuted(true);
                   v.play().finally(() => setWaitingForInteraction(false));
                 });
               } else {
@@ -351,12 +410,14 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
             <div className="w-24 h-24 rounded-full bg-primary/90 flex items-center justify-center mb-4 shadow-2xl animate-pulse">
               <Play className="w-12 h-12 fill-current" />
             </div>
-            <p className="text-lg font-display font-semibold">চ্যানেল দেখতে এখানে ট্যাপ করুন</p>
+            <p className="text-lg font-display font-semibold">
+              চ্যানেল দেখতে এখানে ট্যাপ করুন
+            </p>
           </button>
         )}
       </div>
 
-      {/* Channel Carousel - Separate Section Below Player */}
+      {/* Channel Carousel */}
       <div className="bg-card border-t border-border p-4">
         <Carousel
           opts={{
@@ -370,7 +431,9 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
             {otherChannels.map((ch, index) => (
               <CarouselItem key={ch.id} className="pl-2 basis-auto">
                 <button
-                  ref={(el) => { channelButtonsRef.current[index] = el; }}
+                  ref={(el) => {
+                    channelButtonsRef.current[index] = el;
+                  }}
                   type="button"
                   className="flex flex-col items-center gap-1 cursor-pointer group outline-none focus:scale-110 transition-transform duration-200"
                   tabIndex={0}
@@ -396,7 +459,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
                     onChannelChange(ch);
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter' || e.key === ' ') {
+                    if (e.key === "Enter" || e.key === " ") {
                       e.preventDefault();
                       onChannelChange(ch);
                     }
