@@ -1,5 +1,5 @@
 import { Channel } from "@/types/channel";
-import { X, Users, Radio, AlertCircle, RotateCw } from "lucide-react";
+import { X, Users, Radio, AlertCircle, RotateCw, Play } from "lucide-react";
 import { Button } from "./ui/button";
 import { useState, useRef, useEffect, useCallback } from "react";
 import Hls from "hls.js";
@@ -26,6 +26,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   const [focusedChannelIndex, setFocusedChannelIndex] = useState(0);
   const [liveViewerCount, setLiveViewerCount] = useState(channel.viewers);
   const [retryKey, setRetryKey] = useState(0);
+  const [waitingForInteraction, setWaitingForInteraction] = useState(false);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -64,8 +65,11 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
     const tryPlay = () => {
       const p = video.play();
       if (p && typeof p.catch === "function") {
-        p.catch(() => {
-          // Autoplay blocked; user can press play
+        p.catch((err: any) => {
+          // Autoplay blocked on iOS Safari etc — show tap-to-play overlay
+          if (err && (err.name === "NotAllowedError" || err.name === "AbortError")) {
+            setWaitingForInteraction(true);
+          }
         });
       }
     };
