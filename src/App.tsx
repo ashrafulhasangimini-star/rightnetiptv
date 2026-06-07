@@ -16,8 +16,14 @@ import Streams from "./pages/admin/Streams";
 import Users from "./pages/admin/Users";
 import Settings from "./pages/admin/Settings";
 import Install from "./pages/Install";
+import { useBrowserSupport } from "@/hooks/useBrowserSupport";
 
 const queryClient = new QueryClient();
+
+const BrowserSupportInit = () => {
+  useBrowserSupport();
+  return null;
+};
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -25,6 +31,7 @@ const App = () => (
       <TooltipProvider>
         <Toaster />
         <Sonner />
+        <BrowserSupportInit />
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Index />} />
