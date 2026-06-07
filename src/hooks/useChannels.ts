@@ -100,9 +100,11 @@ export const useUpdateChannel = () => {
 
   return useMutation({
     mutationFn: async ({ id, ...channel }: Partial<Channel> & { id: string }) => {
+      // Strip joined relation field that doesn't exist on the table
+      const { category, ...updateData } = channel as Partial<Channel> & { category?: unknown };
       const { data, error } = await supabase
         .from("channels")
-        .update(channel)
+        .update(updateData)
         .eq("id", id)
         .select()
         .single();
