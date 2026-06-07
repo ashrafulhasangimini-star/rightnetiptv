@@ -17,6 +17,7 @@ export default defineConfig(({ mode }) => ({
       registerType: "autoUpdate",
       includeAssets: ["favicon.ico", "apple-touch-icon.png", "mask-icon.svg"],
       manifest: {
+        id: "/",
         name: "Right NeT TV - লাইভ টিভি স্ট্রিমিং",
         short_name: "Right NeT TV",
         description: "বাংলাদেশের সেরা লাইভ টিভি স্ট্রিমিং প্ল্যাটফর্ম",
@@ -27,6 +28,9 @@ export default defineConfig(({ mode }) => ({
         start_url: "/",
         scope: "/",
         categories: ["entertainment", "news", "sports"],
+        lang: "bn",
+        dir: "ltr",
+        prefer_related_applications: false,
         icons: [
           {
             src: "/pwa-192x192.png",
@@ -52,8 +56,7 @@ export default defineConfig(({ mode }) => ({
             type: "image/png",
             purpose: "maskable"
           }
-        ],
-        screenshots: []
+        ]
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
