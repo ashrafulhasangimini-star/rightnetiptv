@@ -39,6 +39,12 @@ export default defineConfig(({ mode }) => ({
             purpose: "any"
           },
           {
+            src: "/apple-touch-icon.png",
+            sizes: "180x180",
+            type: "image/png",
+            purpose: "any"
+          },
+          {
             src: "/pwa-512x512.png",
             sizes: "512x512",
             type: "image/png",
@@ -60,7 +66,19 @@ export default defineConfig(({ mode }) => ({
       },
       workbox: {
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
+        navigateFallback: "index.html",
+        navigateFallbackDenylist: [/^\/_/, /\/[^/?]+\.[^/]+$/],
         runtimeCaching: [
+          {
+            // Never cache HLS manifests
+            urlPattern: /^https?:\/\/.*\.m3u8(\?.*)?$/i,
+            handler: "NetworkOnly"
+          },
+          {
+            // Never cache HLS video segments
+            urlPattern: /^https?:\/\/.*\.ts(\?.*)?$/i,
+            handler: "NetworkOnly"
+          },
           {
             urlPattern: /^https:\/\/images\.unsplash\.com\/.*/i,
             handler: "CacheFirst",
