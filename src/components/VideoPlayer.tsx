@@ -1,5 +1,5 @@
 import { Channel } from "@/types/channel";
-import { X, Users, Radio, AlertCircle, RotateCw, Play, VolumeX } from "lucide-react";
+import { X, Users, Radio, AlertCircle, RotateCw } from "lucide-react";
 import { Button } from "./ui/button";
 import { useState, useRef, useEffect, useCallback } from "react";
 import Hls from "hls.js";
@@ -26,9 +26,6 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   const [focusedChannelIndex, setFocusedChannelIndex] = useState(0);
   const [liveViewerCount, setLiveViewerCount] = useState(channel.viewers);
   const [retryKey, setRetryKey] = useState(0);
-  const [waitingForInteraction, setWaitingForInteraction] = useState(false);
-  // FIX 1: isMuted state — video শুরু হয় muted, user tap করলে unmute হয়
-  const [isMuted, setIsMuted] = useState(true);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -37,39 +34,22 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   const carouselPointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const viewerCountTrackedRef = useRef(false);
 
-  // FIX 1: isMuted state সরাসরি video element-এ sync করা
-  useEffect(() => {
-    if (videoRef.current) {
-      videoRef.current.muted = isMuted;
-    }
-  }, [isMuted]);
-
   // Initialize HLS / native video player
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !channel.streamUrl) return;
 
-    // FIX 3 & 4: প্রতিবার নতুন channel-এ state পরিষ্কার করা
-    setWaitingForInteraction(false);
     setIsLoading(true);
     setError(null);
-    setIsMuted(true);
 
     const streamUrl = channel.streamUrl;
     const isHLS = /\.m3u8(\?|$)/i.test(streamUrl);
 
-    // FIX 4: আগের HLS instance destroy করা
     if (hlsRef.current) {
       hlsRef.current.destroy();
       hlsRef.current = null;
     }
-    // FIX 4: iOS-এ নতুন source দেওয়ার আগে video element সম্পূর্ণ reset
-    // ⚠️ video.load() with no src fires an error event — তাই listeners এর আগেই করতে হবে
-    video.pause();
-    video.removeAttribute("src");
-    video.load();
 
-    // Handlers — defined here so cleanup can reference them
     const onLoaded = () => setIsLoading(false);
     const onPlaying = () => setIsLoading(false);
     const onWaiting = () => setIsLoading(true);
@@ -77,72 +57,49 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
 
     const tryPlay = () => {
       const p = video.play();
-      if (p && typeof p.catch === "function") {
-        p.catch((err: any) => {
-          // iOS Safari / Firefox autoplay block হলে tap-to-play overlay দেখানো
-          if (err && (err.name === "NotAllowedError" || err.name === "AbortError")) {
-            setWaitingForInteraction(true);
-          }
-        });
-      }
+      if (p && typeof p.catch === "function") p.catch(() => {});
     };
 
-    // FIX BUG: Event listeners টা setTimeout-এর ভেতরে দেওয়া হচ্ছে
-    // কারণ: video.load() (no src) error event fire করে — সেটা যেন onErr না ধরে
-    // FIX 4: 50ms delay — iOS Safari-কে আগের media session release করার সময় দেওয়া
-    const setupTimer = setTimeout(() => {
-      // এখন src set করার পরে listeners attach করা নিরাপদ
-      video.addEventListener("loadeddata", onLoaded);
-      video.addEventListener("playing", onPlaying);
-      video.addEventListener("waiting", onWaiting);
-      video.addEventListener("error", onErr);
+    video.addEventListener("loadeddata", onLoaded);
+    video.addEventListener("playing", onPlaying);
+    video.addEventListener("waiting", onWaiting);
+    video.addEventListener("error", onErr);
 
-      if (!isHLS) {
-        video.src = streamUrl;
-        tryPlay();
-      } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        // iOS Safari / macOS Safari — native HLS, hls.js ব্যবহার করা যাবে না
-        video.src = streamUrl;
-        tryPlay();
-      } else if (Hls.isSupported()) {
-        // Chrome, Firefox, Edge, Android
-        const hls = new Hls({
-          enableWorker: true,
-          lowLatencyMode: true,
-        });
-        hlsRef.current = hls;
-        hls.loadSource(streamUrl);
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MANIFEST_PARSED, () => {
-          tryPlay();
-        });
-        hls.on(Hls.Events.ERROR, (_event, data) => {
-          console.error("HLS error:", data);
-          if (data.fatal) {
-            switch (data.type) {
-              case Hls.ErrorTypes.NETWORK_ERROR:
-                hls.startLoad();
-                break;
-              case Hls.ErrorTypes.MEDIA_ERROR:
-                hls.recoverMediaError();
-                break;
-              default:
-                hls.destroy();
-                hlsRef.current = null;
-                setError("স্ট্রিম প্লে করা যাচ্ছে না");
-                setIsLoading(false);
-            }
+    if (!isHLS) {
+      video.src = streamUrl;
+      tryPlay();
+    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
+      video.src = streamUrl;
+      tryPlay();
+    } else if (Hls.isSupported()) {
+      const hls = new Hls({ enableWorker: true, lowLatencyMode: true });
+      hlsRef.current = hls;
+      hls.loadSource(streamUrl);
+      hls.attachMedia(video);
+      hls.on(Hls.Events.MANIFEST_PARSED, () => tryPlay());
+      hls.on(Hls.Events.ERROR, (_event, data) => {
+        if (data.fatal) {
+          switch (data.type) {
+            case Hls.ErrorTypes.NETWORK_ERROR:
+              hls.startLoad();
+              break;
+            case Hls.ErrorTypes.MEDIA_ERROR:
+              hls.recoverMediaError();
+              break;
+            default:
+              hls.destroy();
+              hlsRef.current = null;
+              setError("স্ট্রিম প্লে করা যাচ্ছে না");
+              setIsLoading(false);
           }
-        });
-      } else {
-        setError("আপনার ব্রাউজার এই ভিডিও সাপোর্ট করে না");
-        setIsLoading(false);
-      }
-    }, 50);
+        }
+      });
+    } else {
+      setError("আপনার ব্রাউজার এই ভিডিও সাপোর্ট করে না");
+      setIsLoading(false);
+    }
 
     return () => {
-      clearTimeout(setupTimer); // FIX 4: unmount হলে timer বাতিল
-      // Listeners সবসময় remove করা — attached হোক বা না হোক, safe
       video.removeEventListener("loadeddata", onLoaded);
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("waiting", onWaiting);
@@ -151,10 +108,6 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
         hlsRef.current.destroy();
         hlsRef.current = null;
       }
-      try {
-        video.removeAttribute("src");
-        video.load();
-      } catch {}
     };
   }, [channel.streamUrl, retryKey]);
 
@@ -317,7 +270,6 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
       <div className="flex-1 relative bg-black min-h-0">
         <video
           ref={videoRef}
-          // FIX 2: object-contain যোগ, hardcoded muted সরানো
           className="w-full h-full object-contain [&::-webkit-media-controls]:opacity-100"
           controls
           playsInline
@@ -326,24 +278,8 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
           x-webkit-airplay="deny"
           disableRemotePlayback
           autoPlay
-          // FIX 1: মূল muted attribute নেই — useEffect দিয়ে control করা হচ্ছে
+          muted
         />
-
-        {/* FIX 1: Unmute overlay — video চলছে কিন্তু muted আছে তখন দেখাবে */}
-        {isMuted && !waitingForInteraction && !error && !isLoading && (
-          <button
-            type="button"
-            onClick={() => {
-              setIsMuted(false);
-              if (videoRef.current) videoRef.current.muted = false;
-            }}
-            className="absolute bottom-4 left-4 z-10 flex items-center gap-2 bg-black/60 hover:bg-black/80 active:scale-95 text-white text-sm rounded-full px-3 py-2 transition-all"
-            aria-label="শব্দ চালু করুন"
-          >
-            <VolumeX className="w-4 h-4" />
-            <span>শব্দ চালু করুন</span>
-          </button>
-        )}
 
         {/* Loading State */}
         {isLoading && !error && (
@@ -386,41 +322,6 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
           </div>
         )}
 
-        {/* Tap-to-play overlay — iOS Safari autoplay block হলে */}
-        {waitingForInteraction && !error && (
-          <button
-            type="button"
-            onClick={() => {
-              const v = videoRef.current;
-              if (!v) return;
-              // প্রথমে unmuted play করার চেষ্টা
-              v.muted = false;
-              setIsMuted(false);
-              const p = v.play();
-              if (p && typeof p.then === "function") {
-                p.then(() => {
-                  setWaitingForInteraction(false);
-                }).catch(() => {
-                  // unmuted play ব্লক হলে muted play
-                  v.muted = true;
-                  setIsMuted(true);
-                  v.play().finally(() => setWaitingForInteraction(false));
-                });
-              } else {
-                setWaitingForInteraction(false);
-              }
-            }}
-            className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/70 text-white"
-            aria-label="চ্যানেল দেখতে এখানে ট্যাপ করুন"
-          >
-            <div className="w-24 h-24 rounded-full bg-primary/90 flex items-center justify-center mb-4 shadow-2xl animate-pulse">
-              <Play className="w-12 h-12 fill-current" />
-            </div>
-            <p className="text-lg font-display font-semibold">
-              চ্যানেল দেখতে এখানে ট্যাপ করুন
-            </p>
-          </button>
-        )}
       </div>
 
       {/* Channel Carousel */}
