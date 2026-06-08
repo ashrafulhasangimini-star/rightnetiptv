@@ -20,6 +20,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
 
+  // NOTE: This client-side admin flag is for UX only (showing/hiding admin UI).
+  // All real authorization is enforced server-side by RLS policies that call
+  // public.has_role(auth.uid(), 'admin'). Never trust this boolean for security.
   const checkAdminRole = async (userId: string) => {
     try {
       const { data, error } = await supabase
@@ -28,14 +31,10 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         .eq("user_id", userId)
         .eq("role", "admin")
         .maybeSingle();
-      
-      if (error) {
-        console.error("Error checking admin role:", error);
-        return false;
-      }
+
+      if (error) return false;
       return !!data;
-    } catch (err) {
-      console.error("Error checking admin role:", err);
+    } catch {
       return false;
     }
   };
