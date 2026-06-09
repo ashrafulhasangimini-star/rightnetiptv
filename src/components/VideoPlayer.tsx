@@ -1,8 +1,9 @@
 import { Channel } from "@/types/channel";
-import { X, Users, Radio, AlertCircle, RotateCw } from "lucide-react";
+import { X, Users, Radio, AlertCircle } from "lucide-react";
 import { Button } from "./ui/button";
 import { useState, useRef, useEffect, useCallback } from "react";
-import Hls from "hls.js";
+import videojs from "video.js";
+import "video.js/dist/video-js.css";
 import {
   Carousel,
   CarouselContent,
@@ -20,176 +21,183 @@ interface VideoPlayerProps {
   onChannelChange: (channel: Channel) => void;
 }
 
-const isPrivateOrLocalHost = (hostname: string) =>
-  /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(hostname);
-
-const getPlaybackUrls = (streamUrl: string) => {
-  const trimmedUrl = streamUrl.trim();
-  const urls = [trimmedUrl];
-
-  try {
-    const parsedUrl = new URL(trimmedUrl, window.location.href);
-
-    if (parsedUrl.protocol === "https:" && isPrivateOrLocalHost(parsedUrl.hostname)) {
-      parsedUrl.protocol = "http:";
-      urls.push(parsedUrl.toString());
-    }
-  } catch {
-    // Invalid URL will be handled by the video/HLS error path.
-  }
-
-  return Array.from(new Set(urls));
-};
-
-const isHlsStream = (streamUrl: string) => /\.m3u8(\?|$)/i.test(streamUrl);
-
 const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlayerProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [focusedChannelIndex, setFocusedChannelIndex] = useState(0);
   const [liveViewerCount, setLiveViewerCount] = useState(channel.viewers);
-  const [retryKey, setRetryKey] = useState(0);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const hlsRef = useRef<Hls | null>(null);
+  const videoRef = useRef<HTMLDivElement>(null);
+  const playerRef = useRef<ReturnType<typeof videojs> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const channelButtonsRef = useRef<(HTMLButtonElement | null)[]>([]);
   const carouselPointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const viewerCountTrackedRef = useRef(false);
 
-  // Initialize HLS / native video player
+  // Initialize Video.js player
   useEffect(() => {
-    const video = videoRef.current;
-    if (!video || !channel.streamUrl) return;
+    if (!videoRef.current || !channel.streamUrl) return;
 
-    let isActive = true;
-    let playbackMode: "file" | "native-hls" | "hls-js" | null = null;
-    let activeUrlIndex = 0;
-    const playbackUrls = getPlaybackUrls(channel.streamUrl);
+    // Clean up previous player
+    if (playerRef.current) {
+      playerRef.current.dispose();
+      playerRef.current = null;
+    }
 
     setIsLoading(true);
     setError(null);
 
-    const destroyHls = () => {
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
+    // Create video element
+    const videoElement = document.createElement("video-js");
+    videoElement.classList.add("vjs-big-play-centered");
+    // Disable AirPlay/Remote Playback to prevent "local network" permission prompt
+    videoElement.setAttribute('disableRemotePlayback', '');
+    videoElement.setAttribute('x-webkit-airplay', 'deny');
+    videoElement.setAttribute('playsinline', 'true');
+    videoElement.setAttribute('webkit-playsinline', 'true');
+    videoRef.current.innerHTML = '';
+    videoRef.current.appendChild(videoElement);
+
+    const streamUrl = channel.streamUrl;
+    const isHLS = streamUrl.includes('.m3u8');
+    const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+    const isAppleDevice = isIOS || isSafari;
+
+    // For iOS/Safari with HLS, use native playback directly
+    // Video.js options - heavily optimized for Safari/iOS
+    const options: any = {
+      autoplay: 'muted', // iOS requires muted autoplay
+      controls: true,
+      responsive: true,
+      fluid: true,
+      preload: 'auto',
+      playsinline: true,
+      liveui: true,
+      muted: isAppleDevice, // Start muted on Apple devices for autoplay
+      // Disable remote playback features (AirPlay, Chromecast) to prevent local network permission
+      enableRemotePlayback: false,
+      html5: {
+        vhs: {
+          // CRITICAL: Always use native HLS on Safari/iOS - do NOT use VHS polyfill
+          overrideNative: !isAppleDevice,
+          enableLowInitialPlaylist: true,
+          smoothQualityChange: true,
+          fastQualityChange: true,
+          maxPlaylistRetries: 10,
+          timeout: 60000,
+          limitRenditionByPlayerDimensions: false,
+          handleManifestRedirects: true,
+          allowSeeksWithinUnsafeLiveWindow: true,
+        },
+        nativeVideoTracks: isAppleDevice,
+        nativeAudioTracks: isAppleDevice,
+        nativeTextTracks: isAppleDevice,
+      },
+      sources: [{
+        src: streamUrl,
+        type: isHLS ? 'application/x-mpegURL' : 'video/mp4'
+      }]
     };
 
-    const failPlayback = () => {
-      if (!isActive) return;
-      setError("স্ট্রিম প্লে করা যাচ্ছে না");
-      setIsLoading(false);
-    };
+    // Initialize player
+    const player = videojs(videoElement, options, function onPlayerReady() {
+      console.log('Video.js player is ready for:', isAppleDevice ? 'Apple Device' : 'Other Device');
 
-    const tryNextUrl = () => {
-      const nextIndex = activeUrlIndex + 1;
-      if (nextIndex >= playbackUrls.length) {
-        failPlayback();
-        return;
-      }
+      // Ensure Remote Playback / Cast discovery is disabled (prevents Chrome "Local network" prompt)
+      try {
+        const techEl = player.tech(true)?.el() as HTMLVideoElement | undefined;
+        if (techEl) {
+          // Property + attribute for broad browser support
+          (techEl as any).disableRemotePlayback = true;
+          techEl.setAttribute('disableRemotePlayback', '');
+          techEl.setAttribute('x-webkit-airplay', 'deny');
+          techEl.setAttribute('playsinline', 'true');
+          techEl.setAttribute('webkit-playsinline', 'true');
+        }
 
-      activeUrlIndex = nextIndex;
-      playUrl(playbackUrls[activeUrlIndex]);
-    };
-
-    const tryPlay = () => {
-      const p = video.play();
-      if (p && typeof p.catch === "function") p.catch(() => {});
-    };
-
-    const playUrl = (streamUrl: string) => {
-      if (!isActive) return;
-
-      destroyHls();
-      playbackMode = null;
-      setIsLoading(true);
-      setError(null);
-
-      video.pause();
-      video.removeAttribute("src");
-      video.load();
-
-      if (!isHlsStream(streamUrl)) {
-        playbackMode = "file";
-        video.src = streamUrl;
-        video.load();
-        tryPlay();
-        return;
-      }
-
-      if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        playbackMode = "native-hls";
-        video.src = streamUrl;
-        video.load();
-        tryPlay();
-        return;
-      }
-
-      if (Hls.isSupported()) {
-        playbackMode = "hls-js";
-        let mediaRecoveryTried = false;
-        const hls = new Hls({
-          enableWorker: true,
-          lowLatencyMode: true,
-          manifestLoadingMaxRetry: 2,
-          levelLoadingMaxRetry: 2,
-          fragLoadingMaxRetry: 2,
-        });
-
-        hlsRef.current = hls;
-        hls.attachMedia(video);
-        hls.on(Hls.Events.MEDIA_ATTACHED, () => {
-          if (isActive && hlsRef.current === hls) hls.loadSource(streamUrl);
-        });
-        hls.on(Hls.Events.MANIFEST_PARSED, () => tryPlay());
-        hls.on(Hls.Events.ERROR, (_event, data) => {
-          if (!data.fatal || !isActive || hlsRef.current !== hls) return;
-
-          if (data.type === Hls.ErrorTypes.MEDIA_ERROR && !mediaRecoveryTried) {
-            mediaRecoveryTried = true;
-            hls.recoverMediaError();
-            return;
+        const innerVideo = player.el()?.querySelector('video') as HTMLVideoElement | null;
+        if (innerVideo) {
+          (innerVideo as any).disableRemotePlayback = true;
+          innerVideo.setAttribute('disableRemotePlayback', '');
+          innerVideo.setAttribute('x-webkit-airplay', 'deny');
+          innerVideo.setAttribute('playsinline', 'true');
+          innerVideo.setAttribute('webkit-playsinline', 'true');
+          
+          // For iOS/Safari, attempt to unmute after user interaction
+          if (isAppleDevice) {
+            innerVideo.muted = true;
+            const unmuteHandler = () => {
+              innerVideo.muted = false;
+              player.muted(false);
+              document.removeEventListener('touchstart', unmuteHandler);
+              document.removeEventListener('click', unmuteHandler);
+            };
+            document.addEventListener('touchstart', unmuteHandler, { once: true });
+            document.addEventListener('click', unmuteHandler, { once: true });
           }
-
-          tryNextUrl();
-        });
-        return;
+        }
+      } catch (e) {
+        console.warn('Remote playback disable failed:', e);
       }
+      
+      player.on('loadeddata', () => {
+        setIsLoading(false);
+      });
 
-      setError("আপনার ব্রাউজার এই ভিডিও সাপোর্ট করে না");
-      setIsLoading(false);
-    };
+      player.on('playing', () => {
+        setIsLoading(false);
+      });
 
-    const onLoaded = () => setIsLoading(false);
-    const onPlaying = () => setIsLoading(false);
-    const onWaiting = () => setIsLoading(true);
-    const onErr = () => {
-      if (playbackMode === "hls-js") return;
-      tryNextUrl();
-    };
+      player.on('waiting', () => {
+        setIsLoading(true);
+      });
 
-    video.addEventListener("loadeddata", onLoaded);
-    video.addEventListener("playing", onPlaying);
-    video.addEventListener("waiting", onWaiting);
-    video.addEventListener("error", onErr);
+      player.on('canplay', () => {
+        setIsLoading(false);
+      });
 
-    playUrl(playbackUrls[0]);
+      player.on('error', () => {
+        const err = player.error();
+        console.error('Video.js error:', err);
+        
+        if (err) {
+          switch (err.code) {
+            case 1:
+              setError("মিডিয়া লোড বাতিল হয়েছে");
+              break;
+            case 2:
+              setError("নেটওয়ার্ক সমস্যা - স্ট্রিম লোড হচ্ছে না");
+              break;
+            case 3:
+              setError("মিডিয়া ডিকোড এরর");
+              break;
+            case 4:
+              setError("এই স্ট্রিম ফরম্যাট সাপোর্টেড নয়");
+              break;
+            default:
+              setError("স্ট্রিম প্লে করা যাচ্ছে না");
+          }
+        }
+        setIsLoading(false);
+      });
+
+      player.on('stalled', () => {
+        console.log('Stream stalled');
+      });
+    });
+
+    playerRef.current = player;
 
     return () => {
-      isActive = false;
-      video.removeEventListener("loadeddata", onLoaded);
-      video.removeEventListener("playing", onPlaying);
-      video.removeEventListener("waiting", onWaiting);
-      video.removeEventListener("error", onErr);
-      destroyHls();
-      video.removeAttribute("src");
-      video.load();
+      if (playerRef.current) {
+        playerRef.current.dispose();
+        playerRef.current = null;
+      }
     };
-  }, [channel.streamUrl, retryKey]);
+  }, [channel.streamUrl]);
 
-  // Track viewer count — increment when player opens, decrement when closes
+  // Track viewer count - increment when player opens, decrement when closes
   useEffect(() => {
     const trackViewer = async () => {
       try {
@@ -207,6 +215,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
     trackViewer();
 
     return () => {
+      // Decrement viewer count when component unmounts
       const untrackViewer = async () => {
         try {
           if (viewerCountTrackedRef.current && channel.id) {
@@ -226,20 +235,21 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   useEffect(() => {
     if (!channel.id) return;
 
+    // Reset live count when channel changes
     setLiveViewerCount(channel.viewers);
 
     const channelSubscription = supabase
       .channel(`viewer-count-${channel.id}`)
       .on(
-        "postgres_changes",
+        'postgres_changes',
         {
-          event: "UPDATE",
-          schema: "public",
-          table: "channels",
-          filter: `id=eq.${channel.id}`,
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'channels',
+          filter: `id=eq.${channel.id}`
         },
         (payload) => {
-          if (payload.new && typeof payload.new.viewer_count === "number") {
+          if (payload.new && typeof payload.new.viewer_count === 'number') {
             setLiveViewerCount(payload.new.viewer_count);
           }
         }
@@ -251,44 +261,39 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
     };
   }, [channel.id, channel.viewers]);
 
-  // Keyboard / D-pad navigation for TV remotes
+  // Keyboard/D-pad navigation for TV
   const otherChannels = channels.filter((ch) => ch.id !== channel.id);
 
-  const handleKeyDown = useCallback(
-    (e: KeyboardEvent) => {
-      if (e.key === "Escape" || e.key === "Backspace" || e.keyCode === 27) {
-        e.preventDefault();
-        onClose();
-        return;
-      }
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    if (e.key === 'Escape' || e.key === 'Backspace' || e.keyCode === 27) {
+      e.preventDefault();
+      onClose();
+      return;
+    }
 
-      switch (e.key) {
-        case "ArrowLeft":
-          e.preventDefault();
-          setFocusedChannelIndex((prev) => Math.max(0, prev - 1));
-          break;
-        case "ArrowRight":
-          e.preventDefault();
-          setFocusedChannelIndex((prev) =>
-            Math.min(otherChannels.length - 1, prev + 1)
-          );
-          break;
-        case "ArrowUp":
-          e.preventDefault();
-          closeButtonRef.current?.focus();
-          break;
-        case "ArrowDown":
-          e.preventDefault();
-          channelButtonsRef.current[focusedChannelIndex]?.focus();
-          break;
-      }
-    },
-    [onClose, otherChannels.length, focusedChannelIndex]
-  );
+    switch (e.key) {
+      case 'ArrowLeft':
+        e.preventDefault();
+        setFocusedChannelIndex((prev) => Math.max(0, prev - 1));
+        break;
+      case 'ArrowRight':
+        e.preventDefault();
+        setFocusedChannelIndex((prev) => Math.min(otherChannels.length - 1, prev + 1));
+        break;
+      case 'ArrowUp':
+        e.preventDefault();
+        closeButtonRef.current?.focus();
+        break;
+      case 'ArrowDown':
+        e.preventDefault();
+        channelButtonsRef.current[focusedChannelIndex]?.focus();
+        break;
+    }
+  }, [onClose, otherChannels.length, focusedChannelIndex]);
 
   useEffect(() => {
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
   useEffect(() => {
@@ -296,16 +301,8 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   }, [focusedChannelIndex]);
 
   return (
-    // FIX 2: safe-area padding যোগ — iPhone notch ও home indicator ঠিক রাখবে
-    <div
-      ref={containerRef}
-      className="fixed inset-0 z-50 bg-background animate-fade-in flex flex-col"
-      style={{
-        paddingTop: "env(safe-area-inset-top)",
-        paddingBottom: "env(safe-area-inset-bottom)",
-      }}
-    >
-      {/* Header */}
+    <div ref={containerRef} className="fixed inset-0 z-50 bg-background animate-fade-in flex flex-col">
+      {/* Header with Channel Info */}
       <div className="flex items-center justify-between p-3 bg-card border-b border-border">
         <div className="flex items-center gap-3">
           <img
@@ -314,9 +311,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
             className="w-10 h-10 rounded-lg object-cover"
           />
           <div>
-            <h2 className="font-display font-semibold text-foreground">
-              {channel.name}
-            </h2>
+            <h2 className="font-display font-semibold text-foreground">{channel.name}</h2>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               {channel.isLive && (
                 <span className="live-badge text-xs">
@@ -331,10 +326,10 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
             </div>
           </div>
         </div>
-        <Button
+        <Button 
           ref={closeButtonRef}
-          variant="ghost"
-          size="icon"
+          variant="ghost" 
+          size="icon" 
           onClick={onClose}
           className="text-foreground hover:bg-accent focus:ring-2 focus:ring-primary/50"
           tabIndex={0}
@@ -344,20 +339,9 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
         </Button>
       </div>
 
-      {/* Video Section — FIX 2: min-h-0 ছাড়া iOS Safari flex-1 ভুল height ধরে */}
-      <div className="flex-1 relative bg-black min-h-0">
-        <video
-          ref={videoRef}
-          className="w-full h-full object-contain [&::-webkit-media-controls]:opacity-100"
-          controls
-          playsInline
-          // @ts-ignore — iOS vendor attribute
-          webkit-playsinline="true"
-          x-webkit-airplay="deny"
-          disableRemotePlayback
-          autoPlay
-          muted
-        />
+      {/* Video Player Section */}
+      <div className="flex-1 relative bg-black">
+        <div ref={videoRef} className="w-full h-full video-js-container" />
 
         {/* Loading State */}
         {isLoading && !error && (
@@ -378,31 +362,14 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
               <div className="w-16 h-16 rounded-full bg-destructive/20 flex items-center justify-center mx-auto mb-4">
                 <AlertCircle className="w-8 h-8 text-destructive" />
               </div>
-              <p className="text-destructive font-semibold">
-                ভিডিও লোড হচ্ছে না। পুনরায় চেষ্টা করুন।
-              </p>
-              <p className="text-sm text-white/70 mt-1">{channel.name}</p>
-              <p className="text-xs text-white/40 mt-1">{error}</p>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="mt-4"
-                onClick={() => {
-                  setError(null);
-                  setIsLoading(true);
-                  setRetryKey((k) => k + 1);
-                }}
-              >
-                <RotateCw className="w-4 h-4 mr-2" />
-                আবার চেষ্টা করুন
-              </Button>
+              <p className="text-destructive">{error}</p>
+              <p className="text-xs text-white/50 mt-2">URL: {channel.streamUrl}</p>
             </div>
           </div>
         )}
-
       </div>
 
-      {/* Channel Carousel */}
+      {/* Channel Carousel - Separate Section Below Player */}
       <div className="bg-card border-t border-border p-4">
         <Carousel
           opts={{
@@ -416,9 +383,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
             {otherChannels.map((ch, index) => (
               <CarouselItem key={ch.id} className="pl-2 basis-auto">
                 <button
-                  ref={(el) => {
-                    channelButtonsRef.current[index] = el;
-                  }}
+                  ref={(el) => { channelButtonsRef.current[index] = el; }}
                   type="button"
                   className="flex flex-col items-center gap-1 cursor-pointer group outline-none focus:scale-110 transition-transform duration-200"
                   tabIndex={0}
@@ -444,7 +409,7 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
                     onChannelChange(ch);
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
+                    if (e.key === 'Enter' || e.key === ' ') {
                       e.preventDefault();
                       onChannelChange(ch);
                     }

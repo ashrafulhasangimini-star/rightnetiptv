@@ -8,8 +8,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Search, X, Save, Loader2, Edit, Trash2, Radio, ExternalLink, Link as LinkIcon, Image, Tag } from "lucide-react";
 import { useChannels, useCreateChannel, useUpdateChannel, useDeleteChannel, Channel } from "@/hooks/useChannels";
 import { useCategories } from "@/hooks/useCategories";
-import { z } from "zod";
-import { toast } from "sonner";
 import {
   Table,
   TableBody,
@@ -79,47 +77,7 @@ const Channels = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    const streamSchema = z
-      .string()
-      .trim()
-      .min(1)
-      .max(2048)
-      .refine((v) => {
-        try {
-          const u = new URL(v);
-          return ["http:", "https:", "rtmp:", "rtmps:", "rtsp:"].includes(u.protocol);
-        } catch {
-          return false;
-        }
-      }, "স্ট্রিম URL অবশ্যই http/https/rtmp/rtmps/rtsp হতে হবে");
-
-    const logoSchema = z
-      .string()
-      .trim()
-      .max(2048)
-      .optional()
-      .refine((v) => {
-        if (!v) return true;
-        try {
-          const u = new URL(v);
-          return ["http:", "https:"].includes(u.protocol);
-        } catch {
-          return false;
-        }
-      }, "লোগো URL অবশ্যই http অথবা https হতে হবে");
-
-    const streamResult = streamSchema.safeParse(formData.stream_url);
-    if (!streamResult.success) {
-      toast.error(streamResult.error.errors[0].message);
-      return;
-    }
-    const logoResult = logoSchema.safeParse(formData.logo_url || undefined);
-    if (!logoResult.success) {
-      toast.error(logoResult.error.errors[0].message);
-      return;
-    }
-
+    
     const channelData = {
       ...formData,
       category_id: formData.category_id || null,

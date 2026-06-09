@@ -75,9 +75,13 @@ export const useDeleteUser = () => {
 
   return useMutation({
     mutationFn: async (userId: string) => {
-      const { error } = await supabase.functions.invoke("delete-user", {
-        body: { userId },
-      });
+      // Note: This only removes the profile, not the auth user
+      // Full user deletion would require admin API
+      const { error } = await supabase
+        .from("profiles")
+        .delete()
+        .eq("user_id", userId);
+
       if (error) throw error;
     },
     onSuccess: () => {

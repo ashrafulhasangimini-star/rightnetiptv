@@ -2,39 +2,6 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ===== Cross-browser fixes (iOS Safari, Firefox, Samsung Internet) ===== */
-
-/* Safe-area padding for notch / home indicator */
-.video-container,
-.safe-area {
-  padding-bottom: env(safe-area-inset-bottom);
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
-}
-
-/* iOS Safari 100vh bug — prefer dynamic viewport */
-.full-height {
-  height: 100dvh;
-  min-height: -webkit-fill-available;
-}
-
-/* Inline video playback on iOS */
-video {
-  object-fit: contain;
-}
-
-/* Backdrop-filter Safari prefix */
-.glass-effect,
-.glass-card {
-  -webkit-backdrop-filter: blur(10px);
-  backdrop-filter: blur(10px);
-}
-
-/* Fixed bars should respect iPhone home indicator */
-.fixed-bottom-safe {
-  padding-bottom: env(safe-area-inset-bottom);
-}
-
 /* Video.js default styles */
 .video-js-container {
   width: 100%;
