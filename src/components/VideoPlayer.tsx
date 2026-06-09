@@ -20,6 +20,29 @@ interface VideoPlayerProps {
   onChannelChange: (channel: Channel) => void;
 }
 
+const isPrivateOrLocalHost = (hostname: string) =>
+  /^(localhost|127\.|10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/i.test(hostname);
+
+const getPlaybackUrls = (streamUrl: string) => {
+  const trimmedUrl = streamUrl.trim();
+  const urls = [trimmedUrl];
+
+  try {
+    const parsedUrl = new URL(trimmedUrl, window.location.href);
+
+    if (parsedUrl.protocol === "https:" && isPrivateOrLocalHost(parsedUrl.hostname)) {
+      parsedUrl.protocol = "http:";
+      urls.push(parsedUrl.toString());
+    }
+  } catch {
+    // Invalid URL will be handled by the video/HLS error path.
+  }
+
+  return Array.from(new Set(urls));
+};
+
+const isHlsStream = (streamUrl: string) => /\.m3u8(\?|$)/i.test(streamUrl);
+
 const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlayerProps) => {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -39,25 +62,112 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
     const video = videoRef.current;
     if (!video || !channel.streamUrl) return;
 
+    let isActive = true;
+    let playbackMode: "file" | "native-hls" | "hls-js" | null = null;
+    let activeUrlIndex = 0;
+    const playbackUrls = getPlaybackUrls(channel.streamUrl);
+
     setIsLoading(true);
     setError(null);
 
-    const streamUrl = channel.streamUrl;
-    const isHLS = /\.m3u8(\?|$)/i.test(streamUrl);
+    const destroyHls = () => {
+      if (hlsRef.current) {
+        hlsRef.current.destroy();
+        hlsRef.current = null;
+      }
+    };
 
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
+    const failPlayback = () => {
+      if (!isActive) return;
+      setError("স্ট্রিম প্লে করা যাচ্ছে না");
+      setIsLoading(false);
+    };
 
-    const onLoaded = () => setIsLoading(false);
-    const onPlaying = () => setIsLoading(false);
-    const onWaiting = () => setIsLoading(true);
-    const onErr = () => setError("স্ট্রিম প্লে করা যাচ্ছে না");
+    const tryNextUrl = () => {
+      const nextIndex = activeUrlIndex + 1;
+      if (nextIndex >= playbackUrls.length) {
+        failPlayback();
+        return;
+      }
+
+      activeUrlIndex = nextIndex;
+      playUrl(playbackUrls[activeUrlIndex]);
+    };
 
     const tryPlay = () => {
       const p = video.play();
       if (p && typeof p.catch === "function") p.catch(() => {});
+    };
+
+    const playUrl = (streamUrl: string) => {
+      if (!isActive) return;
+
+      destroyHls();
+      playbackMode = null;
+      setIsLoading(true);
+      setError(null);
+
+      video.pause();
+      video.removeAttribute("src");
+      video.load();
+
+      if (!isHlsStream(streamUrl)) {
+        playbackMode = "file";
+        video.src = streamUrl;
+        video.load();
+        tryPlay();
+        return;
+      }
+
+      if (video.canPlayType("application/vnd.apple.mpegurl")) {
+        playbackMode = "native-hls";
+        video.src = streamUrl;
+        video.load();
+        tryPlay();
+        return;
+      }
+
+      if (Hls.isSupported()) {
+        playbackMode = "hls-js";
+        let mediaRecoveryTried = false;
+        const hls = new Hls({
+          enableWorker: true,
+          lowLatencyMode: true,
+          manifestLoadingMaxRetry: 2,
+          levelLoadingMaxRetry: 2,
+          fragLoadingMaxRetry: 2,
+        });
+
+        hlsRef.current = hls;
+        hls.attachMedia(video);
+        hls.on(Hls.Events.MEDIA_ATTACHED, () => {
+          if (isActive && hlsRef.current === hls) hls.loadSource(streamUrl);
+        });
+        hls.on(Hls.Events.MANIFEST_PARSED, () => tryPlay());
+        hls.on(Hls.Events.ERROR, (_event, data) => {
+          if (!data.fatal || !isActive || hlsRef.current !== hls) return;
+
+          if (data.type === Hls.ErrorTypes.MEDIA_ERROR && !mediaRecoveryTried) {
+            mediaRecoveryTried = true;
+            hls.recoverMediaError();
+            return;
+          }
+
+          tryNextUrl();
+        });
+        return;
+      }
+
+      setError("আপনার ব্রাউজার এই ভিডিও সাপোর্ট করে না");
+      setIsLoading(false);
+    };
+
+    const onLoaded = () => setIsLoading(false);
+    const onPlaying = () => setIsLoading(false);
+    const onWaiting = () => setIsLoading(true);
+    const onErr = () => {
+      if (playbackMode === "hls-js") return;
+      tryNextUrl();
     };
 
     video.addEventListener("loadeddata", onLoaded);
@@ -65,49 +175,17 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
     video.addEventListener("waiting", onWaiting);
     video.addEventListener("error", onErr);
 
-    if (!isHLS) {
-      video.src = streamUrl;
-      tryPlay();
-    } else if (video.canPlayType("application/vnd.apple.mpegurl")) {
-      video.src = streamUrl;
-      tryPlay();
-    } else if (Hls.isSupported()) {
-      const hls = new Hls({ enableWorker: true, lowLatencyMode: true });
-      hlsRef.current = hls;
-      hls.loadSource(streamUrl);
-      hls.attachMedia(video);
-      hls.on(Hls.Events.MANIFEST_PARSED, () => tryPlay());
-      hls.on(Hls.Events.ERROR, (_event, data) => {
-        if (data.fatal) {
-          switch (data.type) {
-            case Hls.ErrorTypes.NETWORK_ERROR:
-              hls.startLoad();
-              break;
-            case Hls.ErrorTypes.MEDIA_ERROR:
-              hls.recoverMediaError();
-              break;
-            default:
-              hls.destroy();
-              hlsRef.current = null;
-              setError("স্ট্রিম প্লে করা যাচ্ছে না");
-              setIsLoading(false);
-          }
-        }
-      });
-    } else {
-      setError("আপনার ব্রাউজার এই ভিডিও সাপোর্ট করে না");
-      setIsLoading(false);
-    }
+    playUrl(playbackUrls[0]);
 
     return () => {
+      isActive = false;
       video.removeEventListener("loadeddata", onLoaded);
       video.removeEventListener("playing", onPlaying);
       video.removeEventListener("waiting", onWaiting);
       video.removeEventListener("error", onErr);
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
+      destroyHls();
+      video.removeAttribute("src");
+      video.load();
     };
   }, [channel.streamUrl, retryKey]);
 
