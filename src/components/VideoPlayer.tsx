@@ -29,8 +29,8 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   const [liveViewerCount, setLiveViewerCount] = useState(channel.viewers);
   const videoRef = useRef<HTMLVideoElement>(null);
   const hlsRef = useRef<Hls | null>(null);
-  const mpegtsRef = useRef<ReturnType<typeof mpegts.createPlayer> | null>(null);
-  const dashRef = useRef<ReturnType<typeof dashjs.MediaPlayer> | null>(null);
+  const mpegtsRef = useRef<any>(null);
+  const dashRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const channelButtonsRef = useRef<(HTMLButtonElement | null)[]>([]);
@@ -111,9 +111,9 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
           video.src = streamUrl;
         }
       } else if (isDASH) {
-        const player = dashjs.MediaPlayer().create();
+        const player = (dashjs as any).MediaPlayer().create();
         player.initialize(video, streamUrl, true);
-        player.on(dashjs.MediaPlayer.events.ERROR, () => {
+        player.on((dashjs as any).MediaPlayer.events.ERROR, () => {
           setError("DASH স্ট্রিম এরর");
           setIsLoading(false);
         });
@@ -315,7 +315,14 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
 
       {/* Video Player Section */}
       <div className="flex-1 relative bg-black">
-        <div ref={videoRef} className="w-full h-full video-js-container" />
+        <video
+          ref={videoRef}
+          className="w-full h-full bg-black"
+          controls
+          playsInline
+          autoPlay
+          muted
+        />
 
         {/* Loading State */}
         {isLoading && !error && (
