@@ -2,8 +2,9 @@ import { Channel } from "@/types/channel";
 import { X, Users, Radio, AlertCircle } from "lucide-react";
 import { Button } from "./ui/button";
 import { useState, useRef, useEffect, useCallback } from "react";
-import videojs from "video.js";
-import "video.js/dist/video-js.css";
+import Hls from "hls.js";
+import mpegts from "mpegts.js";
+import * as dashjs from "dashjs";
 import {
   Carousel,
   CarouselContent,
@@ -26,174 +27,147 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
   const [error, setError] = useState<string | null>(null);
   const [focusedChannelIndex, setFocusedChannelIndex] = useState(0);
   const [liveViewerCount, setLiveViewerCount] = useState(channel.viewers);
-  const videoRef = useRef<HTMLDivElement>(null);
-  const playerRef = useRef<ReturnType<typeof videojs> | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const hlsRef = useRef<Hls | null>(null);
+  const mpegtsRef = useRef<any>(null);
+  const dashRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const channelButtonsRef = useRef<(HTMLButtonElement | null)[]>([]);
   const carouselPointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const viewerCountTrackedRef = useRef(false);
 
-  // Initialize Video.js player
+  // Initialize multi-engine player (VLC-like open-source codec coverage)
   useEffect(() => {
     if (!videoRef.current || !channel.streamUrl) return;
-
-    // Clean up previous player
-    if (playerRef.current) {
-      playerRef.current.dispose();
-      playerRef.current = null;
-    }
 
     setIsLoading(true);
     setError(null);
 
-    // Create video element
-    const videoElement = document.createElement("video-js");
-    videoElement.classList.add("vjs-big-play-centered");
-    // Disable AirPlay/Remote Playback to prevent "local network" permission prompt
-    videoElement.setAttribute('disableRemotePlayback', '');
-    videoElement.setAttribute('x-webkit-airplay', 'deny');
-    videoElement.setAttribute('playsinline', 'true');
-    videoElement.setAttribute('webkit-playsinline', 'true');
-    videoRef.current.innerHTML = '';
-    videoRef.current.appendChild(videoElement);
-
+    const video = videoRef.current;
     const streamUrl = channel.streamUrl;
-    const isHLS = streamUrl.includes('.m3u8');
+    const url = streamUrl.toLowerCase().split("?")[0];
+    const isHLS = url.includes(".m3u8");
+    const isDASH = url.includes(".mpd");
+    const isFLV = url.includes(".flv");
+    const isTS = url.endsWith(".ts") || url.includes(".m2ts");
     const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
     const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
     const isAppleDevice = isIOS || isSafari;
 
-    // For iOS/Safari with HLS, use native playback directly
-    // Video.js options - heavily optimized for Safari/iOS
-    const options: any = {
-      autoplay: 'muted', // iOS requires muted autoplay
-      controls: true,
-      responsive: true,
-      fluid: true,
-      preload: 'auto',
-      playsinline: true,
-      liveui: true,
-      muted: isAppleDevice, // Start muted on Apple devices for autoplay
-      // Disable remote playback features (AirPlay, Chromecast) to prevent local network permission
-      enableRemotePlayback: false,
-      html5: {
-        vhs: {
-          // CRITICAL: Always use native HLS on Safari/iOS - do NOT use VHS polyfill
-          overrideNative: !isAppleDevice,
-          enableLowInitialPlaylist: true,
-          smoothQualityChange: true,
-          fastQualityChange: true,
-          maxPlaylistRetries: 10,
-          timeout: 60000,
-          limitRenditionByPlayerDimensions: false,
-          handleManifestRedirects: true,
-          allowSeeksWithinUnsafeLiveWindow: true,
-        },
-        nativeVideoTracks: isAppleDevice,
-        nativeAudioTracks: isAppleDevice,
-        nativeTextTracks: isAppleDevice,
-      },
-      sources: [{
-        src: streamUrl,
-        type: isHLS ? 'application/x-mpegURL' : 'video/mp4'
-      }]
+    // Reset video element
+    video.pause();
+    video.removeAttribute("src");
+    video.load();
+
+    video.muted = true;
+    video.playsInline = true;
+    video.autoplay = true;
+    (video as any).disableRemotePlayback = true;
+
+    const onLoaded = () => setIsLoading(false);
+    const onWaiting = () => setIsLoading(true);
+    const onPlaying = () => setIsLoading(false);
+    const onErr = () => {
+      setError("এই স্ট্রিম ফরম্যাট সাপোর্টেড নয়");
+      setIsLoading(false);
+    };
+    video.addEventListener("loadeddata", onLoaded);
+    video.addEventListener("canplay", onLoaded);
+    video.addEventListener("waiting", onWaiting);
+    video.addEventListener("playing", onPlaying);
+    video.addEventListener("error", onErr);
+
+    const cleanupEngines = () => {
+      if (hlsRef.current) { hlsRef.current.destroy(); hlsRef.current = null; }
+      if (mpegtsRef.current) {
+        try { mpegtsRef.current.unload(); mpegtsRef.current.detachMediaElement(); mpegtsRef.current.destroy(); } catch {}
+        mpegtsRef.current = null;
+      }
+      if (dashRef.current) { try { dashRef.current.reset(); } catch {} dashRef.current = null; }
     };
 
-    // Initialize player
-    const player = videojs(videoElement, options, function onPlayerReady() {
-      console.log('Video.js player is ready for:', isAppleDevice ? 'Apple Device' : 'Other Device');
-
-      // Ensure Remote Playback / Cast discovery is disabled (prevents Chrome "Local network" prompt)
-      try {
-        const techEl = player.tech(true)?.el() as HTMLVideoElement | undefined;
-        if (techEl) {
-          // Property + attribute for broad browser support
-          (techEl as any).disableRemotePlayback = true;
-          techEl.setAttribute('disableRemotePlayback', '');
-          techEl.setAttribute('x-webkit-airplay', 'deny');
-          techEl.setAttribute('playsinline', 'true');
-          techEl.setAttribute('webkit-playsinline', 'true');
+    try {
+      if (isHLS) {
+        if (isAppleDevice || video.canPlayType("application/vnd.apple.mpegurl")) {
+          video.src = streamUrl;
+        } else if (Hls.isSupported()) {
+          const hls = new Hls({
+            lowLatencyMode: true,
+            backBufferLength: 30,
+            maxBufferLength: 30,
+            enableWorker: true,
+          });
+          hls.loadSource(streamUrl);
+          hls.attachMedia(video);
+          hls.on(Hls.Events.ERROR, (_e, data) => {
+            if (data.fatal) {
+              setError("HLS স্ট্রিম এরর");
+              setIsLoading(false);
+            }
+          });
+          hlsRef.current = hls;
+        } else {
+          video.src = streamUrl;
         }
-
-        const innerVideo = player.el()?.querySelector('video') as HTMLVideoElement | null;
-        if (innerVideo) {
-          (innerVideo as any).disableRemotePlayback = true;
-          innerVideo.setAttribute('disableRemotePlayback', '');
-          innerVideo.setAttribute('x-webkit-airplay', 'deny');
-          innerVideo.setAttribute('playsinline', 'true');
-          innerVideo.setAttribute('webkit-playsinline', 'true');
-          
-          // For iOS/Safari, attempt to unmute after user interaction
-          if (isAppleDevice) {
-            innerVideo.muted = true;
-            const unmuteHandler = () => {
-              innerVideo.muted = false;
-              player.muted(false);
-              document.removeEventListener('touchstart', unmuteHandler);
-              document.removeEventListener('click', unmuteHandler);
-            };
-            document.addEventListener('touchstart', unmuteHandler, { once: true });
-            document.addEventListener('click', unmuteHandler, { once: true });
-          }
-        }
-      } catch (e) {
-        console.warn('Remote playback disable failed:', e);
+      } else if (isDASH) {
+        const player = (dashjs as any).MediaPlayer().create();
+        player.initialize(video, streamUrl, true);
+        player.on((dashjs as any).MediaPlayer.events.ERROR, () => {
+          setError("DASH স্ট্রিম এরর");
+          setIsLoading(false);
+        });
+        dashRef.current = player;
+      } else if ((isFLV || isTS) && mpegts.isSupported()) {
+        const player = mpegts.createPlayer({
+          type: isFLV ? "flv" : "mpegts",
+          url: streamUrl,
+          isLive: true,
+          cors: true,
+        }, {
+          enableWorker: true,
+          enableStashBuffer: false,
+          stashInitialSize: 128,
+          liveBufferLatencyChasing: true,
+        });
+        player.attachMediaElement(video);
+        player.load();
+        player.on(mpegts.Events.ERROR, () => {
+          setError("TS/FLV স্ট্রিম এরর");
+          setIsLoading(false);
+        });
+        mpegtsRef.current = player;
+      } else {
+        video.src = streamUrl;
       }
-      
-      player.on('loadeddata', () => {
-        setIsLoading(false);
-      });
+    } catch (e) {
+      console.error("Player init failed", e);
+      setError("প্লেয়ার শুরু করা যায়নি");
+      setIsLoading(false);
+    }
 
-      player.on('playing', () => {
-        setIsLoading(false);
-      });
+    const playPromise = video.play();
+    if (playPromise) playPromise.catch(() => {});
 
-      player.on('waiting', () => {
-        setIsLoading(true);
-      });
-
-      player.on('canplay', () => {
-        setIsLoading(false);
-      });
-
-      player.on('error', () => {
-        const err = player.error();
-        console.error('Video.js error:', err);
-        
-        if (err) {
-          switch (err.code) {
-            case 1:
-              setError("মিডিয়া লোড বাতিল হয়েছে");
-              break;
-            case 2:
-              setError("নেটওয়ার্ক সমস্যা - স্ট্রিম লোড হচ্ছে না");
-              break;
-            case 3:
-              setError("মিডিয়া ডিকোড এরর");
-              break;
-            case 4:
-              setError("এই স্ট্রিম ফরম্যাট সাপোর্টেড নয়");
-              break;
-            default:
-              setError("স্ট্রিম প্লে করা যাচ্ছে না");
-          }
-        }
-        setIsLoading(false);
-      });
-
-      player.on('stalled', () => {
-        console.log('Stream stalled');
-      });
-    });
-
-    playerRef.current = player;
+    // Unmute after user interaction
+    const unmute = () => {
+      video.muted = false;
+      document.removeEventListener("touchstart", unmute);
+      document.removeEventListener("click", unmute);
+    };
+    document.addEventListener("touchstart", unmute, { once: true });
+    document.addEventListener("click", unmute, { once: true });
 
     return () => {
-      if (playerRef.current) {
-        playerRef.current.dispose();
-        playerRef.current = null;
-      }
+      video.removeEventListener("loadeddata", onLoaded);
+      video.removeEventListener("canplay", onLoaded);
+      video.removeEventListener("waiting", onWaiting);
+      video.removeEventListener("playing", onPlaying);
+      video.removeEventListener("error", onErr);
+      document.removeEventListener("touchstart", unmute);
+      document.removeEventListener("click", unmute);
+      cleanupEngines();
+      try { video.pause(); video.removeAttribute("src"); video.load(); } catch {}
     };
   }, [channel.streamUrl]);
 
@@ -341,7 +315,14 @@ const VideoPlayer = ({ channel, channels, onClose, onChannelChange }: VideoPlaye
 
       {/* Video Player Section */}
       <div className="flex-1 relative bg-black">
-        <div ref={videoRef} className="w-full h-full video-js-container" />
+        <video
+          ref={videoRef}
+          className="w-full h-full bg-black"
+          controls
+          playsInline
+          autoPlay
+          muted
+        />
 
         {/* Loading State */}
         {isLoading && !error && (
