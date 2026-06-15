@@ -1,5 +1,5 @@
 import { Channel } from "@/types/channel";
-import { X, Users, Radio, AlertCircle, Cone } from "lucide-react";
+import { X, Users, Radio, AlertCircle } from "lucide-react";
 import { Button } from "./ui/button";
 import { useState, useRef, useEffect, useCallback } from "react";
 import Hls from "hls.js";
