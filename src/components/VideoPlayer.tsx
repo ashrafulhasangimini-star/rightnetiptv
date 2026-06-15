@@ -4,7 +4,7 @@ import { Button } from "./ui/button";
 import { useState, useRef, useEffect, useCallback } from "react";
 import Hls from "hls.js";
 import mpegts from "mpegts.js";
-import dashjs from "dashjs";
+import * as dashjs from "dashjs";
 import {
   Carousel,
   CarouselContent,
